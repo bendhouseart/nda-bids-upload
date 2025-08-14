@@ -195,6 +195,7 @@ def filemap_and_recordsprep(dest_dir, mapper_script, source_dir, skip):
 
                 for i in range(len(filtered_lookup)):
                     sub_ses = filtered_lookup[i]["bids_subject_session"]
+                    guid = filtered_lookup[i].get("subjectkey", "").replace("_", "")
 
                     if ("_" in sub_ses) and ("_ses-" not in sub_ses):
                         print(
@@ -226,11 +227,11 @@ def filemap_and_recordsprep(dest_dir, mapper_script, source_dir, skip):
                     if subject_and_session_flag:
                         child_dir = os.path.join(
                             parent_dir,
-                            bids_subject + "_" + bids_session + "." + parent_tail,
+                            "sub-" + guid + "_" + bids_session + "." + parent_tail,
                         )
                     else:
                         child_dir = os.path.join(
-                            parent_dir, bids_subject + "." + parent_tail
+                            parent_dir, "sub-" + guid + "." + parent_tail
                         )
 
                     if os.path.isdir(parent_dir):
@@ -255,10 +256,12 @@ def filemap_and_recordsprep(dest_dir, mapper_script, source_dir, skip):
                             + str(subject)
                             + ",SESSION="
                             + str(session)
+                            + ",GUID="
+                            + str(guid)
                             + "'"
                         )
                     else:
-                        template = "'SUBJECT=" + str(subject) + "'"
+                        template = "'SUBJECT=" + str(subject) + ",GUID=" + str(guid) +"'"
 
                     FM_cmd = (
                         "python3 "
