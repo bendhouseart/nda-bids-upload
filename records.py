@@ -142,10 +142,11 @@ def records_sanity_check(input):
     badflag = False
     for key in content:
         value = content[key]
-        if len(value) == 0:
+        if value == "" or value == None:
             badflag = True
             print('Empty field in ' + content_yaml + ':')
-            print('    ' + key + ': "' + value + '"')
+            print(f"{key}: {value}")
+            #print(f'    ' + {key} + ': "' + {value} + '"')
 
     if badflag:
         print('No empty fields allowed in content .yaml files.  Exiting...')
@@ -203,7 +204,7 @@ def cli(input):
     ### DO WORK ###
     # 1. GLOB all .../ndastructure_type.class.subset/sub-subject_ses-session.type.class.subset/ folders
     uploads = glob(os.path.join(parent, '*.*.*.*'))
-
+    print(f"parent: {parent}, uploads: {uploads}")
     # 2. loop over the folders
     subprocess.call(('echo `date` Creating NDA records'), shell=True)
     records = []
@@ -274,6 +275,7 @@ def cli(input):
 
     max_batch_size = 500 # @TODO this needs to become an integer input defaulted to 500
     total = len(records)
+    print(f"total={total}")
     count = math.ceil(float(total) / max_batch_size )
     batch_size = math.ceil(float(total) / count )
 
