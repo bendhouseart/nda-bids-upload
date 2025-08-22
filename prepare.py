@@ -9,8 +9,9 @@ import argparse
 import csv
 import os
 import stat
-import subprocess
 import sys
+from filemapper import process_json_file
+from records import cli as records_cli
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 
@@ -76,7 +77,7 @@ def input_check():
         sys.exit(1)
 
     dest_dir = args.dest.rstrip("/")
-    manifest_dir = os.path.join(dest_dir, "manifest-data")
+    manifest_dir = os.path.join(os.path.dirname(__file__), "manifest-data")
     file_mapper = os.path.join(dest_dir, "file-mapper")
 
     if not os.path.isdir(manifest_dir):
@@ -105,32 +106,6 @@ def input_check():
             print("Missing NDA manifest script " + manifest_script + ", Exiting.")
             sys.exit(3)
 
-    if not os.path.isdir(file_mapper):
-        print(
-            "Missing file mapper directory "
-            + file_mapper
-            + ", Exiting. Clone from https://github.com/DCAN-Labs/file-mapper"
-        )
-        sys.exit(4)
-    else:
-        mapper_script = os.path.join(file_mapper, "file_mapper_script.py")
-
-        # make executable
-        mapper_status = os.stat(mapper_script)
-        try:
-            os.chmod(mapper_script, mapper_status.st_mode | stat.S_IEXEC)
-            print(
-                "Warning: Unable to assign executable permissions to "
-                + mapper_script
-                + ", continuing anyway."
-            )
-        except:
-            pass
-
-        if not os.path.isfile(mapper_script):
-            print("Missing file mapper script " + mapper_script + ", Exiting.")
-            sys.exit(5)
-
     if not os.path.isdir(args.source_dir):
         print(
             "The provided source was not a directory " + args.source_dir + ", Exiting."
@@ -139,10 +114,10 @@ def input_check():
 
     source_dir = args.source_dir.rstrip("/")
 
-    return dest_dir, mapper_script, manifest_script, source_dir, args.skip
+    return dest_dir, manifest_script, source_dir, args.skip
 
 
-def filemap_and_recordsprep(dest_dir, mapper_script, source_dir, skip):
+def filemap_and_recordsprep(dest_dir, source_dir, skip):
 
     if skip:
         print("Skipping file-mapping")
@@ -246,39 +221,33 @@ def filemap_and_recordsprep(dest_dir, mapper_script, source_dir, skip):
                         except FileExistsError:
                             print(child_dir + " exists")
 
-                    # calling the file mapper script.
+                    # calling the file mapper function directly
                     print("Preparing " + bids_subject)
 
-                    # creating the string to be used in the template field of the file mapper.
+                    # creating the template string for the file mapper
                     if subject_and_session_flag:
-                        template = (
-                            "'SUBJECT="
-                            + str(subject)
-                            + ",SESSION="
-                            + str(session)
-                            + ",GUID="
-                            + str(guid)
-                            + "'"
-                        )
+                        template = f"SUBJECT={subject},SESSION={session},GUID={guid}"
                     else:
-                        template = "'SUBJECT=" + str(subject) + ",GUID=" + str(guid) +"'"
+                        template = f"SUBJECT={subject},GUID={guid}"
 
-                    FM_cmd = (
-                        "python3 "
-                        + mapper_script
-                        + " -s "
-                        + " -a symlink "
-                        + " -sp "
-                        + source_dir
-                        + " -dp "
-                        + child_dir
-                        + " -t "
-                        + template
-                        + " "
-                        + os.path.join(dest_dir, filename)
-                    )
-
-                    subprocess.call(FM_cmd, shell=True)
+                    # Call the file mapper function directly
+                    try:
+                        process_json_file(
+                            json_file=os.path.join(dest_dir, filename),
+                            sourcepath=source_dir,
+                            destpath=child_dir,
+                            template=template,
+                            action="symlink",
+                            overwrite=False,
+                            testdebug=False,
+                            verbose=True,
+                            relsym=False,
+                            sidecars=False,
+                            skip_errors=False,
+                        )
+                    except Exception as e:
+                        print(f"Error processing {bids_subject}: {e}")
+                        continue
 
                     # if FM_cmd failed
                     if not os.path.isdir(child_dir):
@@ -308,18 +277,26 @@ def filemap_and_recordsprep(dest_dir, mapper_script, source_dir, skip):
             parent_name = filename.rstrip(".json")
             parent_dir = os.path.join(dest_dir, parent_name)
 
-            RP_cmd = "python3 " + os.path.join(HERE, "records.py") + " -p " + parent_dir
+            # Call the records function directly
+            try:
+                records_cli(parent_dir)
+            except Exception as e:
+                print(f"Error processing records for {parent_name}: {e}")
+                continue
 
-            subprocess.call(RP_cmd, shell=True)
 
-
-if __name__ == "__main__":
+def main():
+    """Main entry point for the nda-prepare command."""
     print("Starting input check")
-    dest_dir, mapper_script, manifest_script, source_dir, skip = input_check()
+    dest_dir, manifest_script, source_dir, skip = input_check()
 
     print("Starting file-mapping and records preparation")
-    filemap_and_recordsprep(dest_dir, mapper_script, source_dir, skip)
+    filemap_and_recordsprep(dest_dir, source_dir, skip)
 
     print("Complete! Please review data prepared at: " + dest_dir)
 
     sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

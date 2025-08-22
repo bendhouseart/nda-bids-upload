@@ -315,17 +315,25 @@ def cli(input):
             continue
 
         # nda-manifest each folder
-        manifest_file = ".".join([upload_dir, "manifest", "json"])
 
         subprocess.call(
-            " ".join(["python3", manifest_script, "-id", ".", "-of", manifest_file]),
+            " ".join(["python3", manifest_script, "-id", ".", "-of", "manifest.json"]),
             shell=True,
             cwd=upload_dir,
             stdout=subprocess.DEVNULL,
         )
 
         # correct the manifest contents to remove the leading "./" from each manifest element
-        subprocess.call('sed -i "s|\./||g" ' + manifest_file, shell=True)
+        # Read the manifest file, replace "./" with "", and write it back
+        manifest_json_path = os.path.join(upload_dir, "manifest.json")
+        try:
+            with open(manifest_json_path, "r") as f:
+                content = f.read()
+            content = content.replace("./", "")
+            with open(manifest_json_path, "w") as f:
+                f.write(content)
+        except Exception as e:
+            print(f"Warning: Could not process manifest file {manifest_json_path}: {e}")
 
         # write the new record for entry into the larger output CSV
         new_record = {}
@@ -336,12 +344,12 @@ def cli(input):
                 new_record[column] = ""
 
         if basename.startswith("fmriresults01") or basename.startswith("image03"):
-            new_record["manifest"] = os.path.basename(manifest_file)
+            new_record["manifest"] = "manifest.json"
             new_record["image_description"] = ".".join(
                 [datatype, dataclass, datasubset]
             )
         elif basename.startswith("imagingcollection01"):
-            new_record["image_manifest"] = os.path.basename(manifest_file)
+            new_record["image_manifest"] = "manifest.json"
             new_record["image_collection_desc"] = ".".join(
                 [datatype, dataclass, datasubset]
             )
