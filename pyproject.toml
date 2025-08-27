@@ -24,6 +24,7 @@ dependencies = [
     "PyYAML>=6.0",
     "pandas>=1.5.0",
     "file-mapper @ git+https://github.com/bendhouseart/file-mapper.git@refactor-pythonic",
+    "nda-tools",
 ]
 
 [project.scripts]
@@ -52,7 +53,15 @@ packages = ["."]
 "*.py" = "*.py"
 "README.md" = "README.md"
 "LICENSE" = "LICENSE"
-"manifest-data/" = "manifest-data/"
+"manifest-data/**/*" = "manifest-data/**/*"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "*.py",
+    "README.md",
+    "LICENSE",
+    "manifest-data/**/*",
+]
 
 [tool.uv]
 dev-dependencies = [

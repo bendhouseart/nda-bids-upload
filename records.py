@@ -10,11 +10,15 @@ import argparse
 import csv
 import math
 import os
-import subprocess
 import sys
 import yaml
 
 from glob import glob
+
+# load nda_manifests.py from submodule
+sys.path.append(os.path.abspath("manifest-data"))
+from nda_manifests import Manifest
+
 
 
 HERE = os.path.dirname(os.path.realpath(__file__))
@@ -272,7 +276,7 @@ def cli(input):
     uploads = glob(os.path.join(parent, "*.*.*.*"))
     print(f"parent: {parent}, uploads: {uploads}")
     # 2. loop over the folders
-    subprocess.call(("echo `date` Creating NDA records"), shell=True)
+    print("echo `date` Creating NDA records")
     records = []
     folders = []
     for upload_dir in uploads:
@@ -316,12 +320,9 @@ def cli(input):
 
         # nda-manifest each folder
 
-        subprocess.call(
-            " ".join(["python3", manifest_script, "-id", ".", "-of", "manifest.json"]),
-            shell=True,
-            cwd=upload_dir,
-            stdout=subprocess.DEVNULL,
-        )
+        manifest = Manifest()
+        manifest.create_frome_dir(upload_dir)
+        manifest.output_as_file(os.path.join(upload_dir, "manifest.json"))
 
         # correct the manifest contents to remove the leading "./" from each manifest element
         # Read the manifest file, replace "./" with "", and write it back
@@ -380,7 +381,7 @@ def cli(input):
     batch_size = math.ceil(float(total) / count)
 
     low = 0
-    subprocess.call(("echo `date` Creating batch files"), shell=True)
+    print("echo `date` Creating batch files")
     for i in range(1, count + 1):
         if i < count or total == batch_size:
             B = batch_size
