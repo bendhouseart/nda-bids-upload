@@ -12,7 +12,7 @@ import math
 import os
 import sys
 import yaml
-
+from datetime import datetime
 from glob import glob
 
 # load nda_manifests.py from submodule
@@ -276,7 +276,7 @@ def cli(input):
     uploads = glob(os.path.join(parent, "*.*.*.*"))
     print(f"parent: {parent}, uploads: {uploads}")
     # 2. loop over the folders
-    print("echo `date` Creating NDA records")
+    print(f"{datetime.now()} Creating NDA records")
     records = []
     folders = []
     for upload_dir in uploads:
@@ -321,7 +321,7 @@ def cli(input):
         # nda-manifest each folder
 
         manifest = Manifest()
-        manifest.create_frome_dir(upload_dir)
+        manifest.create_from_dir(upload_dir)
         manifest.output_as_file(os.path.join(upload_dir, "manifest.json"))
 
         # correct the manifest contents to remove the leading "./" from each manifest element
@@ -329,10 +329,10 @@ def cli(input):
         manifest_json_path = os.path.join(upload_dir, "manifest.json")
         try:
             with open(manifest_json_path, "r") as f:
-                content = f.read()
-            content = content.replace("./", "")
+                manifest_content = f.read()
+            manifest_content = manifest_content.replace("./", "")
             with open(manifest_json_path, "w") as f:
-                f.write(content)
+                f.write(manifest_content)
         except Exception as e:
             print(f"Warning: Could not process manifest file {manifest_json_path}: {e}")
 
@@ -381,7 +381,7 @@ def cli(input):
     batch_size = math.ceil(float(total) / count)
 
     low = 0
-    print("echo `date` Creating batch files")
+    print(f"{datetime.now()} Creating batch files")
     for i in range(1, count + 1):
         if i < count or total == batch_size:
             B = batch_size
