@@ -290,7 +290,7 @@ def cli(input):
             "."
         )
 
-        # Extract NDAR GUID from the folder name (e.g., "sub-NDARINVPF905YYE_ses-baseline" -> "NDARINVPF905YYE")
+        # Extract NDAR GUID from the folder name (e.g., "sub-NDAR123456_ses-baseline" -> "NDAR123456")
         if bids_subject_session.startswith("sub-"):
             ndar_guid = bids_subject_session[4:]  # Remove "sub-" prefix
             if "_ses-" in ndar_guid:
