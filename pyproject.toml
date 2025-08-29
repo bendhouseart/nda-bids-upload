@@ -1,11 +1,11 @@
 [project]
 name = "nda-bids-upload"
-version = "0.1.0"
-description = "DCAN Labs NDA BIDS preparation tool wrapper"
+version = "0.0.0"
+description =  "NDA BIDS Upload Tool "
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [
-    {name = "DCAN Labs", email = ""}
+    {name = "nimh-dsst", email = ""}
 ]
 license = {text = "MIT"}
 keywords = ["nda", "bids", "neuroimaging", "data-upload"]
