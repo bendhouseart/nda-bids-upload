@@ -143,6 +143,21 @@ def nda_vt():
                 continue
 
             subprocess.call(('echo `date` Uploading: ' + description), shell=True)
+            """
+            this is the most important command, args.vtcmd is a direct input for nda tools upload command
+            records batch is at most 500 records to be uploaded at once, this had to do with the stability an upload (may be fixed)
+            but realistically if it works chill out.
+
+            Note: you need to login with the nda tool/file in home directory to enable auto login (~/.nda) 
+
+            -c collection id (this is pre-assigned and you will need to have access to it)
+            -m root folder containg data to upload (working_directory in this repo/codebase)
+            -t title (name of the json and yaml ) image03_sourcedata....
+            -d also name of the json and yaml image03_sourcedata... (will find out)
+            -l points to a batch file of folder e.g. working_directory/image03_sourcedata.pet.pet.complete_folders.txt that contains 
+               all folders that have a manifest.json file and will be uploaded to the collection
+            -b batch (NDA's definition) 
+            """
             cmd = (args.vtcmd + ' ' + records_batch +
                   ' -c ' + str(args.collection_id) +
                   ' -m ' + source +

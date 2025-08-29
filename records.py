@@ -52,7 +52,7 @@ def generate_parser():
             '"derivatives", "class" is "anat", "dwi", "fmap", "func", or something '
             'similar, and "subset" is the user-defined "data subset type".'
             'For example: "image03_inputs.anat.T1w" containing subfolders like '
-            '"sub-NDARABC123_ses-baseline.inputs.anat.T1w"'
+            '"sub-NDAR123456_ses-baseline.inputs.anat.T1w"'
         ),
     )
 
@@ -290,7 +290,7 @@ def cli(input):
             "."
         )
 
-        # Extract NDAR GUID from the folder name (e.g., "sub-NDARINVPF905YYE_ses-baseline" -> "NDARINVPF905YYE")
+        # Extract NDAR GUID from the folder name (e.g., "sub-NDAR123456_ses-baseline" -> "NDAR123456")
         if bids_subject_session.startswith("sub-"):
             ndar_guid = bids_subject_session[4:]  # Remove "sub-" prefix
             if "_ses-" in ndar_guid:
