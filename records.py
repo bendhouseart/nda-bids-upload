@@ -14,6 +14,7 @@ import sys
 import yaml
 from datetime import datetime
 from glob import glob
+import subprocess
 
 # load nda_manifests.py from submodule
 sys.path.append(os.path.abspath("manifest-data"))
@@ -325,7 +326,6 @@ def cli(input):
             os.path.join(upload_dir, f"{bids_subject_session}.manifest.json")
         )
 
-
         # correct the manifest contents to remove the leading "./" from each manifest element
         # Read the manifest file, replace "./" with "", and write it back
         manifest_json_path = os.path.join(
@@ -417,6 +417,42 @@ def cli(input):
                 f.write(folder + "\n")
 
     print("FINISHED " + basename + " RECORDS PREPARATION.")
+
+    validation = run_vtcmd_realtime(parent + ".complete_records.csv", input)
+    if validation == 0:
+        print(f"Files prepped at {input} with {parent}.complete_records.csv are valid.")
+    else:
+        print(
+            f"Files prepped at {input} with {parent}.complete_records.csv are invalid, run\n"
+            f"vtcdm {input}.complete_records.csv -m {input} --verbose\n"
+            f"for more details on how to fix"
+            )
+
+# Usage:
+# run_vtcmd('image03_sourcedata.pet.pet.complete_records.csv', 'image03_sourcedata.pet.pet/')
+def run_vtcmd_realtime(csv_file, manifest_dir):
+    # TODO Refactor pythonic
+    """Run vtcmd with real-time output"""
+    cmd = ["vtcmd", csv_file, "-m", manifest_dir]
+
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+        )
+
+        for line in process.stdout:
+            print(line, end="")
+
+        process.wait()
+        return process.returncode == 0
+    except Exception as e:
+        print(f"Error running vtcmd: {e}")
+        return False
 
 
 if __name__ == "__main__":
