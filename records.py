@@ -14,11 +14,11 @@ import sys
 import yaml
 from datetime import datetime
 from glob import glob
+import subprocess
 
 # load nda_manifests.py from submodule
 sys.path.append(os.path.abspath("manifest-data"))
 from nda_manifests import Manifest
-
 
 
 HERE = os.path.dirname(os.path.realpath(__file__))
@@ -322,11 +322,16 @@ def cli(input):
 
         manifest = Manifest()
         manifest.create_from_dir(upload_dir)
-        manifest.output_as_file(os.path.join(upload_dir, "manifest.json"))
+        manifest.output_as_file(
+            os.path.join(upload_dir, f"{bids_subject_session}.manifest.json")
+        )
 
         # correct the manifest contents to remove the leading "./" from each manifest element
         # Read the manifest file, replace "./" with "", and write it back
-        manifest_json_path = os.path.join(upload_dir, "manifest.json")
+        manifest_json_path = os.path.join(
+            upload_dir, f"{bids_subject_session}.manifest.json"
+        )
+        manifest_json_relative_path = os.path.relpath(manifest_json_path, input)
         try:
             with open(manifest_json_path, "r") as f:
                 manifest_content = f.read()
@@ -345,12 +350,15 @@ def cli(input):
                 new_record[column] = ""
 
         if basename.startswith("fmriresults01") or basename.startswith("image03"):
-            new_record["manifest"] = "manifest.json"
+            # Use relative path from the parent directory instead of absolute path
+            new_record["manifest"] = manifest_json_relative_path
             new_record["image_description"] = ".".join(
                 [datatype, dataclass, datasubset]
             )
         elif basename.startswith("imagingcollection01"):
-            new_record["image_manifest"] = "manifest.json"
+            # Use relative path from the parent directory instead of absolute path
+            manifest_filename = f"{bids_subject_session}.manifest.json"
+            new_record["image_manifest"] = manifest_filename
             new_record["image_collection_desc"] = ".".join(
                 [datatype, dataclass, datasubset]
             )
@@ -409,6 +417,42 @@ def cli(input):
                 f.write(folder + "\n")
 
     print("FINISHED " + basename + " RECORDS PREPARATION.")
+
+    validation = run_vtcmd_realtime(parent + ".complete_records.csv", input)
+    if validation == 0:
+        print(f"Files prepped at {input} with {parent}.complete_records.csv are valid.")
+    else:
+        print(
+            f"Files prepped at {input} with {parent}.complete_records.csv are invalid, run\n"
+            f"vtcdm {input}.complete_records.csv -m {input} --verbose\n"
+            f"for more details on how to fix"
+            )
+
+# Usage:
+# run_vtcmd('image03_sourcedata.pet.pet.complete_records.csv', 'image03_sourcedata.pet.pet/')
+def run_vtcmd_realtime(csv_file, manifest_dir):
+    # TODO Refactor pythonic
+    """Run vtcmd with real-time output"""
+    cmd = ["vtcmd", csv_file, "-m", manifest_dir]
+
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+        )
+
+        for line in process.stdout:
+            print(line, end="")
+
+        process.wait()
+        return process.returncode == 0
+    except Exception as e:
+        print(f"Error running vtcmd: {e}")
+        return False
 
 
 if __name__ == "__main__":
