@@ -1,0 +1,74 @@
+[project]
+name = "nda-bids-upload"
+version = "0.0.0"
+description =  "NDA BIDS Upload Tool "
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    {name = "nimh-dsst", email = ""}
+]
+license = {text = "MIT"}
+keywords = ["nda", "bids", "neuroimaging", "data-upload"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "mkdocs-material>=9.0.0",
+    "PyYAML>=6.0",
+    "pandas>=1.5.0",
+    "file-mapper @ git+https://github.com/bendhouseart/file-mapper.git@refactor-pythonic",
+    "nda-tools",
+]
+
+[project.scripts]
+nda-prepare = "prepare:main"
+nda-records = "records:cli"
+
+[project.urls]
+Homepage = "https://github.com/DCAN-Labs/nda-bids-upload"
+Documentation = "https://ndabids.readthedocs.io/"
+Repository = "https://github.com/DCAN-Labs/nda-bids-upload"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.hatch.build.targets.wheel.sources]
+"." = "."
+
+[tool.hatch.build.targets.wheel.include]
+"*.py" = "*.py"
+"README.md" = "README.md"
+"LICENSE" = "LICENSE"
+"manifest-data/**/*" = "manifest-data/**/*"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "*.py",
+    "README.md",
+    "LICENSE",
+    "manifest-data/**/*",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+]
+
+[tool.uv.sources]
+file-mapper = {git = "https://github.com/bendhouseart/file-mapper.git", branch = "refactor-pythonic"}
