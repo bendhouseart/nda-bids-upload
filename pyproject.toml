@@ -3,7 +3,7 @@ name = "nda-bids-upload"
 version = "0.0.0"
 description =  "NDA BIDS Upload Tool "
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
     {name = "nimh-dsst", email = ""}
 ]
@@ -14,7 +14,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -23,7 +22,7 @@ dependencies = [
     "mkdocs-material>=9.0.0",
     "PyYAML>=6.0",
     "pandas>=1.5.0",
-    "file-mapper @ git+https://github.com/bendhouseart/file-mapper.git@refactor-pythonic",
+    "file-mapper @ git+https://github.com/bendhouseart/file-mapper.git",
     "nda-tools",
 ]
 
@@ -71,4 +70,4 @@ dev-dependencies = [
 ]
 
 [tool.uv.sources]
-file-mapper = {git = "https://github.com/bendhouseart/file-mapper.git", branch = "refactor-pythonic"}
+file-mapper = {git = "https://github.com/bendhouseart/file-mapper.git", branch = "main"}
