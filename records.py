@@ -272,8 +272,16 @@ def cli(input):
         ndar_to_bids_mapping[ndar_guid] = row["bids_subject_session"]
 
     ### DO WORK ###
+
+    # get original working dir (just to not break things)
+    original_working_dir = os.getcwd()
+
+    # change into parent directory get get relative paths
+    os.chdir(parent)
+
     # 1. GLOB all .../ndastructure_type.class.subset/sub-subject_ses-session.type.class.subset/ folders
-    uploads = glob(os.path.join(parent, "*.*.*.*"))
+    uploads = glob("*.*.*.*")
+    #uploads = glob(os.path.join(parent, "*.*.*.*"))
     print(f"parent: {parent}, uploads: {uploads}")
     # 2. loop over the folders
     print(f"{datetime.now()} Creating NDA records")
@@ -369,6 +377,8 @@ def cli(input):
 
         records.append(new_record)
         folders.append(upload_dir)
+    
+    os.chdir(original_working_dir)
 
     with open(parent + ".complete_records.csv", "w") as f:
         f.write(ndaheader + "\n")
