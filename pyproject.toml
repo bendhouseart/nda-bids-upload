@@ -73,3 +73,8 @@ dev-dependencies = [
 
 [tool.uv.sources]
 file-mapper = {git = "https://github.com/bendhouseart/file-mapper.git", branch = "main"}
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.31.0",
+]
