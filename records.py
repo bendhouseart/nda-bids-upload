@@ -71,7 +71,7 @@ def records_sanity_check(input):
 
     dest_dir = os.path.dirname(parent)
     lookup_csv = os.path.join(dest_dir, "lookup.csv")
-    manifest_script = os.path.join(dest_dir, "manifest-data", "nda_manifests.py")
+    manifest_script = os.path.join(HERE, "manifest-data", "nda_manifests.py")
 
     # check if manifest_script exists
     if not os.path.isfile(manifest_script):
@@ -212,7 +212,7 @@ def cli(input):
     # setting easy use variables from argparse
     parent = os.path.abspath(os.path.realpath(input))
     dest_dir = os.path.dirname(parent)
-    manifest_script = os.path.join(dest_dir, "manifest-data", "nda_manifests.py")
+    manifest_script = os.path.join(HERE, "manifest-data", "nda_manifests.py")
     lookup_csv = os.path.join(dest_dir, "lookup.csv")
 
     # grab parent's basename
@@ -426,7 +426,8 @@ def cli(input):
             f"Files prepped at {input} with {parent}.complete_records.csv are invalid, run\n"
             f"vtcdm {input}.complete_records.csv -m {input} --verbose\n"
             f"for more details on how to fix"
-            )
+        )
+
 
 # Usage:
 # run_vtcmd('image03_sourcedata.pet.pet.complete_records.csv', 'image03_sourcedata.pet.pet/')
