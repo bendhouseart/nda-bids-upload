@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "mkdocs-material>=9.0.0",
-    "PyYAML>=6.0",
+    "pyyaml>=6.0",
     "pandas>=1.5.0",
     "file-mapper @ git+https://github.com/bendhouseart/file-mapper.git",
     "nda-tools",

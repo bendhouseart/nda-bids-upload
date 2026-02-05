@@ -1,7 +1,9 @@
 """Pytest configuration and shared fixtures."""
 
+from collections import namedtuple
 import copy
 import json
+import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -125,3 +127,13 @@ def bids_pet_fixture_unknown_age_units(tmp_path):
     _build_bids_pet_root(tmp_path, PARTICIPANTS_DATA, PARTICIPANTS_JSON_UNKNOWN_AGE_UNITS)
     return tmp_path
 
+
+@pytest.fixture
+def pet002_copy(tmp_path, bids_examples_petprep):
+    """Fresh copy of bids-examples/pet002 into a temp dir (function-scoped, for mapping tests)."""
+    bids_dir = tmp_path / "pet002"
+    shutil.copytree(bids_examples_petprep, bids_dir)
+    upload_dir = tmp_path / "upload_dir"
+    upload_dir.mkdir()
+    TestDataset = namedtuple("TestDataset",['bids_dir', 'upload_dir'])
+    return TestDataset(bids_dir=bids_dir, upload_dir=upload_dir)
