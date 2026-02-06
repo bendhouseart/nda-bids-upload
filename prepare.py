@@ -240,13 +240,16 @@ def filemap_and_recordsprep(dest_dir, source_dir, skip):
                             action="symlink",
                             overwrite=False,
                             testdebug=False,
-                            verbose=True,
+                            verbose=False,
                             relsym=False,
                             sidecars=False,
                             skip_errors=False,
                         )
                     except Exception as e:
-                        print(f"Error processing {bids_subject}: {e}")
+                        if "File exists" in str(e):
+                            pass
+                        else:
+                            print(f"Error processing {bids_subject}: {e}")
                         continue
 
                     # if FM_cmd failed
@@ -273,7 +276,6 @@ def filemap_and_recordsprep(dest_dir, source_dir, skip):
     for filename in os.listdir(dest_dir):
         if filename.endswith(".json"):
 
-            
             # creating the parent and child directory for the files to get mapped to
             parent_name = filename.rstrip(".json")
             parent_dir = os.path.join(dest_dir, parent_name)
