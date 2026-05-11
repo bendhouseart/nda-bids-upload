@@ -23,6 +23,7 @@ import random
 import shutil
 import subprocess
 import tempfile
+from random import randrange
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -30,6 +31,12 @@ import pandas as pd
 from bids import BIDSLayout
 
 from utilities.lookup import LookUpTable
+
+def _random_date() -> date:
+    """Return a random date between 1970-01-01 and today."""
+    today = date.today()
+    start = date(1970, 1, 1)
+    return start + timedelta(days=randrange(0, (today - start).days))
 
 
 def _load_conftest_guids() -> list[str]:
@@ -197,7 +204,15 @@ def _copy_dataset_level_files(
         except ValueError:
             rel = root.name
         out_dir = output_root / rel
-        for name in ("dataset_description.json", "participants.json", "README", "README.md"):
+        for name in (
+            "dataset_description.json", 
+            "participants.json", 
+            "README", 
+            "README.md", 
+            "readme", 
+            "README.txt", 
+            "readme.txt", 
+            ):
             src = root / name
             if src.is_file():
                 _copy_file(src, out_dir / name)
@@ -213,7 +228,7 @@ def _populate_lookup_guids_and_dates(
 ) -> pd.DataFrame:
     """Fill subjectkey from guids (by subject index in keep_ids) and interview_date as mm/dd/yyyy."""
     if base_date is None:
-        base_date = date(2020, 1, 1)
+        base_date = _random_date()
     subject_to_idx = {sid: i for i, sid in enumerate(keep_ids)}
     subjectkey = df["src_subject_id"].map(
         lambda s: guids[subject_to_idx[s]] if s in subject_to_idx and subject_to_idx[s] < len(guids) else ""

@@ -98,7 +98,7 @@ class LookUpTable:
                     "interview_date": "",
                     "datatype": ents.get("datatype", ""),
                 }
-                for possible in [('interview_age', 99), ('sex', 'F'), ('weight', 99)]:
+                for possible in [('interview_age', 89), ('sex', 'F'), ('weight', 89)]:
                     try:
                         info[possible[0]] = self.participants_tsv[possible[0]][f"sub-{s}"]
                         if possible[0] == 'interview_age':
