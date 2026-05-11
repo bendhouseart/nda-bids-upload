@@ -1,6 +1,6 @@
 [project]
 name = "nda-bids-upload"
-version = "0.0.0"
+version = "0.0.1"
 description =  "NDA BIDS Upload Tool "
 readme = "README.md"
 requires-python = ">=3.10"

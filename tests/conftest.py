@@ -9,18 +9,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-GUIDS = [
-    'NDAR_INVCF394YBD',
-    'NDAR_INVVL685VY9',
-    'NDAR_INVAL430AUP',
-    'NDAR_INVBP115MEP',
-    'NDAR_INVRG747YLF',
-    'NDAR_INVMM568GH7',
-    'NDAR_INVHH455BJ4',
-    'NDAR_INVJF572MVK',
-    'NDAR_INVMX897ZJD',
-    'NDAR_INVKF926DLD'
-    ]
+# load GUIDS from text file
+with open("tests/ten_pseudoguids.csv", "r") as f:
+    GUIDS = [guid for guid in f.read().splitlines() if "NDAR" in guid]
 
 # Hardcoded participants (pet002-style). TSV is written via pandas for readability.
 PARTICIPANTS_DATA = [

@@ -131,6 +131,7 @@ def records_sanity_check(input):
         sys.exit(7)
 
     problem_child_flag = False
+    # here top level refers to common files contained in the top level of the BIDS dataset
     is_bids_toplevel = basename == "image03_sourcedata.bids.toplevel"
 
     for root, dirs, files in os.walk(parent):

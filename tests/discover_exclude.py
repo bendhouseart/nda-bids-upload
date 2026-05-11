@@ -5,6 +5,10 @@ Run from project root:
     uv run python tests/discover_exclude.py
 
 Then rerun the test; it will skip datasets listed in tests/exclude.txt.
+
+Ultimately the goal is to reduce the number of excluded datasets to a minimum as more datasets in
+bids-examples are supported by the pipeline. Initially, we are only supporting PET as that modality
+is the what this pipeline has been tested on.
 """
 
 import sys
