@@ -59,7 +59,7 @@ def _project_root() -> Path:
 
 def _default_validator_config() -> Path:
     """Path to default validator config (bids-examples/default-config.json)."""
-    return _project_root() / "bids-examples" / "default-config.json"
+    return _project_root() / "tests" / "bids-examples" / "default-config.json"
 
 
 def _run_bids_validator(

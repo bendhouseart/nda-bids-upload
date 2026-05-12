@@ -10,11 +10,16 @@ import argparse
 import csv
 import math
 import os
+import re
+import shutil
 import sys
 import yaml
 from datetime import datetime
 from glob import glob
 import subprocess
+from pathlib import Path
+
+import pandas
 
 # load nda_manifests.py from submodule
 sys.path.append(os.path.abspath("manifest-data"))
@@ -22,6 +27,24 @@ from nda_manifests import Manifest
 
 
 HERE = os.path.dirname(os.path.realpath(__file__))
+
+
+def vtcmd_path() -> str | None:
+    """Resolve ``vtcmd`` (nda-tools).
+
+    Callers assume the active Python environment already has project dependencies
+    installed (``nda-tools`` in ``pyproject.toml``). We try ``PATH`` first, then the
+    directory next to ``sys.executable`` so a minimal ``PATH`` still finds the script.
+    """
+    found = shutil.which("vtcmd")
+    if found:
+        return found
+    name = "vtcmd.exe" if sys.platform == "win32" else "vtcmd"
+    candidate = Path(sys.executable).parent / name
+    if candidate.is_file():
+        return str(candidate)
+    return None
+
 
 __doc__ = """
 This python command-line tool allows the user to do 
@@ -444,7 +467,9 @@ def cli(input):
     print("FINISHED " + basename + " RECORDS PREPARATION.")
 
     validation = run_vtcmd_realtime(parent + ".complete_records.csv", input, log_dir=dest_dir)
-    if validation == 0:
+    # int 0 is success; `False` is failure (must not use `validation == 0` alone — False == 0 in Python).
+    validation_ok = validation is not False and validation == 0
+    if validation_ok:
         print(f"Files prepped at {input} with {parent}.complete_records.csv are valid.")
     else:
         print(
@@ -452,6 +477,14 @@ def cli(input):
             f"vtcdm {input}.complete_records.csv -m {input} --verbose\n"
             f"for more details on how to fix"
         )
+    # run_vtcmd_realtime returns False on exception; check before `== 0` because False == 0 in Python.
+    if validation is False:
+        return 1
+    if validation == 0:
+        return 0
+    if isinstance(validation, int):
+        return validation
+    return 1
 
 
 # Usage:
@@ -459,8 +492,20 @@ def cli(input):
 def run_vtcmd_realtime(csv_file, manifest_dir, log_dir=None):
     # TODO Refactor pythonic
     """Run vtcmd with real-time output"""
-    cmd = ["vtcmd", csv_file, "-m", manifest_dir, "-w",]
-    #if log_dir:
+    exe = vtcmd_path()
+    if not exe:
+        print(
+            "vtcmd not found (not on PATH and not next to this Python); "
+            "install nda-tools in this environment (e.g. pip install nda-tools).",
+            file=sys.stderr,
+        )
+        return 127
+    cmd = [exe, csv_file, "-m", manifest_dir, "-w", "-f"]
+    # nda-tools 0.7+ validates via the NDA API; pass username when set so non-interactive
+    # runs can use credentials already stored in ~/.NDATools/settings.cfg + OS keyring.
+    nda_user = (os.environ.get("NDA_USERNAME") or os.environ.get("NDA_TOOLS_USERNAME") or "").strip()
+    if nda_user:
+        cmd[1:1] = ["-u", nda_user]
     #    cmd += cmd + ['--log-dir', log_dir]
 
     try:
@@ -480,28 +525,26 @@ def run_vtcmd_realtime(csv_file, manifest_dir, log_dir=None):
         }
         for line in process.stdout:
             print(line, end="")
-            # collect warnings output file
-            if 'Warnings output' or 'qa errors saved to' in line:
-                import re, pandas
+            if "Warnings output" in line or "qa errors saved to" in line:
                 pattern = r"(?:Warnings output to:|Complete list of qa errors saved to:)\s*(/[^ ]+\.csv)"
                 warnings_files = re.findall(pattern, line)
-                for f in warnings_files:
-                    df = pandas.read_csv(f)
-                    # TODO throw this error outside of testing.
+                for csv_path in warnings_files:
+                    df = pandas.read_csv(csv_path)
                     if "ERROR CODE" in df.columns:
-                        mask = df["ERROR CODE"].str.contains(r"duplicateRecords", na=False)
+                        mask = df["ERROR CODE"].str.contains(
+                            r"duplicateRecords", na=False
+                        )
                         df = df[~mask]
-                    for e in ['validation_qa', 'validation_varnings']:
-                        vtcmd_qa_errors_and_warnings[e] += len(df)
+                    row_count = len(df)
+                    vtcmd_qa_errors_and_warnings["validation_qa"] += row_count
+                    vtcmd_qa_errors_and_warnings["validation_warnings"] += row_count
 
-                        
-        # collect path to errors file
-
-        process.wait()
-        if len(vtcmd_qa_errors_and_warnings["validation_qa"]) <= 0:
-            return 0
-        elif len(vtcmd_qa_errors_and_warnings["validation_qa"]) > 0:
+        rc = process.wait()
+        if rc != 0:
+            return rc
+        if vtcmd_qa_errors_and_warnings["validation_qa"] > 0:
             return 1
+        return 0
     except Exception as e:
         print(f"Error running vtcmd: {e}")
         return False
@@ -513,5 +556,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     records_sanity_check(args.parent)
-    cli(args.parent)
-    sys.exit(0)
+    sys.exit(cli(args.parent))

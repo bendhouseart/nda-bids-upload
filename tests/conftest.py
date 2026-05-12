@@ -27,13 +27,13 @@ PARTICIPANTS_JSON = {
     "gender": {"LongName": "gender", "Description": "Sex of the participant", "Levels": {"M": "male", "F": "female"}},
 }
 
-# Same ages in months (for Units: "months" → multiplier 1)
+# Ages already in months (Units: "months" → multiplier 1 for NDA interview_age)
 PARTICIPANTS_DATA_MONTHS = [
-    {"participant_id": "sub-01", "height": 163.5, "weight": 51, "age": 21, "gender": "F"},
-    {"participant_id": "sub-02", "height": 170, "weight": 51.2, "age": 20, "gender": "F"},
+    {"participant_id": "sub-01", "height": 163.5, "weight": 51, "age": 252, "gender": "F"},
+    {"participant_id": "sub-02", "height": 170, "weight": 51.2, "age": 240, "gender": "F"},
 ]
 PARTICIPANTS_JSON_MONTHS = copy.deepcopy(PARTICIPANTS_JSON)
-#PARTICIPANTS_JSON_MONTHS["age"]["Units"] = "months"
+PARTICIPANTS_JSON_MONTHS["age"]["Units"] = "months"
 
 # Same ages in weeks (for Units: "weeks" → multiplier 1/4 to get months)
 PARTICIPANTS_DATA_WEEKS = [

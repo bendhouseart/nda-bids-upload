@@ -9,6 +9,8 @@ import tempfile
 from pathlib import Path
 import pytest
 
+from records import vtcmd_path
+
 # Folder names under bids-examples to skip (e.g. "code", "tools").
 # Datasets that fail reduce_bids + lookup are listed in tests/exclude.txt (one per line).
 # Run: uv run python tests/discover_exclude.py  to regenerate exclude.txt.
@@ -117,7 +119,23 @@ def test_pet002_example_present(bids_examples_available):
 
 
 def test_bids_examples_to_nda(bids_examples_available, dataset_path):
-    """Per dataset: temp folder -> reduce -> lookup on reduced -> update lookup.csv with GUIDs/dates; assert success."""
+    """Per dataset: temp folder -> reduce -> lookup on reduced -> update lookup.csv with GUIDs/dates; assert success.
+
+    Assumes pytest runs in the same environment where the project is installed
+    (``pyproject.toml`` dependencies, including ``nda-tools`` / ``vtcmd``).
+
+    **NDA login (nda-tools 0.7+):** ``vtcmd`` calls the NDA validation API and must
+    authenticate. Do a one-time interactive login from this repo's venv (same machine
+    you use for pytest), e.g. run ``vtcmd`` on any small CSV with ``-m`` / ``-w`` as
+    needed and enter your NDA username and password when prompted. Credentials are
+    stored under ``~/.NDATools/`` and the OS keyring. For headless runs, set
+    ``NDA_USERNAME`` (or ``NDA_TOOLS_USERNAME``) if your username is not already in
+    ``settings.cfg``; the password must still be available in the keyring from that
+    prior login.
+    """
+    assert vtcmd_path(), (
+        "vtcmd missing for this interpreter; install the project here (e.g. `pip install -e .`)."
+    )
     from populate_bids_participants import (
         ndaify_participants_files,
         InvalidDatasetError,

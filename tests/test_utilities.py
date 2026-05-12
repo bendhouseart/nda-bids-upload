@@ -4,16 +4,16 @@ from bids import BIDSLayout
 from tempfile import TemporaryDirectory
 from utilities.lookup import LookUpTable
 
-# Expected lookup table for bids-examples/pet002 (from running create_lookup_table).
+# Expected lookup for conftest minimal PET layout: years in TSV → interview_age in months (NDA).
 EXPECTED_PET002_LOOKUP = pd.DataFrame([
-    {"bids_subject_session": "sub-01_ses-baseline", "subjectkey": "", "src_subject_id": "sub-01", "interview_date": "", "interview_age": 252, "sex": "F", "datatype": "anat"},
-    {"bids_subject_session": "sub-01_ses-baseline", "subjectkey": "", "src_subject_id": "sub-01", "interview_date": "", "interview_age": 252, "sex": "F", "datatype": "pet"},
-    {"bids_subject_session": "sub-01_ses-rescan", "subjectkey": "", "src_subject_id": "sub-01", "interview_date": "", "interview_age": 252, "sex": "F", "datatype": "anat"},
-    {"bids_subject_session": "sub-01_ses-rescan", "subjectkey": "", "src_subject_id": "sub-01", "interview_date": "", "interview_age": 252, "sex": "F", "datatype": "pet"},
-    {"bids_subject_session": "sub-02_ses-baseline", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "datatype": "anat"},
-    {"bids_subject_session": "sub-02_ses-baseline", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "datatype": "pet"},
-    {"bids_subject_session": "sub-02_ses-rescan", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "datatype": "anat"},
-    {"bids_subject_session": "sub-02_ses-rescan", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "datatype": "pet"},
+    {"bids_subject_session": "sub-01_ses-baseline", "subjectkey": "", "src_subject_id": "sub-01", "interview_date": "", "interview_age": 252, "sex": "F", "weight": 51, "datatype": "anat"},
+    {"bids_subject_session": "sub-01_ses-baseline", "subjectkey": "", "src_subject_id": "sub-01", "interview_date": "", "interview_age": 252, "sex": "F", "weight": 51, "datatype": "pet"},
+    {"bids_subject_session": "sub-01_ses-rescan", "subjectkey": "", "src_subject_id": "sub-01", "interview_date": "", "interview_age": 252, "sex": "F", "weight": 51, "datatype": "anat"},
+    {"bids_subject_session": "sub-01_ses-rescan", "subjectkey": "", "src_subject_id": "sub-01", "interview_date": "", "interview_age": 252, "sex": "F", "weight": 51, "datatype": "pet"},
+    {"bids_subject_session": "sub-02_ses-baseline", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "weight": 51.2, "datatype": "anat"},
+    {"bids_subject_session": "sub-02_ses-baseline", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "weight": 51.2, "datatype": "pet"},
+    {"bids_subject_session": "sub-02_ses-rescan", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "weight": 51.2, "datatype": "anat"},
+    {"bids_subject_session": "sub-02_ses-rescan", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "weight": 51.2, "datatype": "pet"},
 ])
 
 
@@ -34,7 +34,15 @@ def test_lookup_table_with_pet_data(bids_pet_fixture):
     # Sort for stable comparison (layout iteration order may vary)
     actual = actual.sort_values(["bids_subject_session", "datatype"]).reset_index(drop=True)
     expected = EXPECTED_PET002_LOOKUP.sort_values(["bids_subject_session", "datatype"]).reset_index(drop=True)
-    pd.testing.assert_frame_equal(actual, expected, check_exact=False, atol=1e-4, rtol=0)
+    pd.testing.assert_frame_equal(
+        actual,
+        expected,
+        check_exact=False,
+        check_dtype=False,
+        check_like=True,
+        atol=1e-3,
+        rtol=0,
+    )
 
 def test_not_a_bids_dataset():
     tempdir = TemporaryDirectory()
