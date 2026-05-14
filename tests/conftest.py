@@ -9,6 +9,29 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--bids-examples-workdir",
+        action="store",
+        default=None,
+        metavar="DIR",
+        help=(
+            "For test_bids_examples_to_nda: write each dataset under DIR/<dataset>/ "
+            "(instead of a TemporaryDirectory) so outputs can be inspected. "
+            "Example: --bids-examples-workdir=/home/you/test_bids_examples_nda"
+        ),
+    )
+
+
+@pytest.fixture
+def bids_examples_workdir(request) -> Path | None:
+    """Directory from ``--bids-examples-workdir``, or None to use a temp directory."""
+    raw = request.config.getoption("--bids-examples-workdir", default=None)
+    if raw is None:
+        return None
+    return Path(raw).expanduser().resolve()
+
 # load GUIDS from text file
 with open("tests/ten_pseudoguids.csv", "r") as f:
     GUIDS = [guid for guid in f.read().splitlines() if "NDAR" in guid]
@@ -27,13 +50,13 @@ PARTICIPANTS_JSON = {
     "gender": {"LongName": "gender", "Description": "Sex of the participant", "Levels": {"M": "male", "F": "female"}},
 }
 
-# Same ages in months (for Units: "months" → multiplier 1)
+# Ages already in months (Units: "months" → multiplier 1 for NDA interview_age)
 PARTICIPANTS_DATA_MONTHS = [
-    {"participant_id": "sub-01", "height": 163.5, "weight": 51, "age": 21, "gender": "F"},
-    {"participant_id": "sub-02", "height": 170, "weight": 51.2, "age": 20, "gender": "F"},
+    {"participant_id": "sub-01", "height": 163.5, "weight": 51, "age": 252, "gender": "F"},
+    {"participant_id": "sub-02", "height": 170, "weight": 51.2, "age": 240, "gender": "F"},
 ]
 PARTICIPANTS_JSON_MONTHS = copy.deepcopy(PARTICIPANTS_JSON)
-#PARTICIPANTS_JSON_MONTHS["age"]["Units"] = "months"
+PARTICIPANTS_JSON_MONTHS["age"]["Units"] = "months"
 
 # Same ages in weeks (for Units: "weeks" → multiplier 1/4 to get months)
 PARTICIPANTS_DATA_WEEKS = [
@@ -56,13 +79,22 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _bids_examples_dir() -> Path | None:
+    """bids-examples submodule path (see ``.gitmodules``)."""
+    candidate = _project_root() / "tests" / "bids-examples"
+    return candidate if candidate.is_dir() else None
+
+
 @pytest.fixture(scope="session")
 def bids_examples_root() -> Path:
     """Path to the bids-examples directory (submodule)."""
-    root = _project_root() / "bids-examples"
-    if not root.is_dir():
-        pytest.skip("bids-examples not found (submodule may not be initialized)")
-    return root
+    found = _bids_examples_dir()
+    if found is None:
+        pytest.skip(
+            "tests/bids-examples not found (submodule may not be initialized; "
+            "run: git submodule update --init --recursive)"
+        )
+    return found
 
 
 @pytest.fixture(scope="session")

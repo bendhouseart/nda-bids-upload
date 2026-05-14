@@ -302,9 +302,14 @@ def filemap_and_recordsprep(dest_dir, source_dir, skip):
             parent_name = filename.rstrip(".json")
             parent_dir = os.path.join(dest_dir, parent_name)
 
-            # Call the records function directly
+            # Call the records function directly (returns vtcmd validation exit code)
             try:
-                records_cli(parent_dir)
+                vtcmd_rc = records_cli(parent_dir)
+                if vtcmd_rc != 0:
+                    print(
+                        f"vtcmd validation failed for {parent_name} (exit {vtcmd_rc}). Exiting."
+                    )
+                    sys.exit(vtcmd_rc)
             except Exception as e:
                 print(f"Error processing records for {parent_name}: {e}")
                 continue

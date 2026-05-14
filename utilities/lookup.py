@@ -4,7 +4,11 @@ import os
 import pandas
 import json
 from argparse import ArgumentParser
-from math import floor
+
+# NDA expects interview_age in months. TSV values are usually in calendar years.
+YEARS_TO_NDA_MONTHS = 12.0
+# When age cannot be read from participants, assume this many years, then convert to months.
+DEFAULT_MISSING_AGE_YEARS = 89
 
 
 class LookUpTable:
@@ -55,9 +59,6 @@ class LookUpTable:
                         f"participants.json not found: {participants_json_path}"
                     ) from err
 
-        # convert ages from years to months per NDA requirements
-        age_multiplier = 12
-
         # recast gender column and sidecar as sex if gender is present
         gender_col, sex_column = next(
             (
@@ -83,6 +84,8 @@ class LookUpTable:
             self.participants_json["sex"] = self.participants_json[gender_col]
             self.participants_json.pop(gender_col)
 
+        age_col, age_to_months_mult = self._age_column_and_months_multiplier()
+
         # create a subject/session list
         for s in self.subject_list:
             for entities in self.bids_layout.get(subject=s):
@@ -98,22 +101,65 @@ class LookUpTable:
                     "interview_date": "",
                     "datatype": ents.get("datatype", ""),
                 }
-                for possible in [('interview_age', 89), ('sex', 'F'), ('weight', 89)]:
+                try:
+                    raw_age = self.participants_tsv.loc[f"sub-{s}", age_col]
+                    months = float(raw_age) * float(age_to_months_mult)
+                    info["interview_age"] = int(round(months))
+                except (KeyError, TypeError):
+                    info["interview_age"] = int(
+                        DEFAULT_MISSING_AGE_YEARS * YEARS_TO_NDA_MONTHS
+                    )
+                for field, default in (("sex", "F"), ("weight", 89)):
                     try:
-                        info[possible[0]] = self.participants_tsv[possible[0]][f"sub-{s}"]
-                        if possible[0] == 'interview_age':
-                            info[possible[0]] = info[possible[0]] * 12
-                    except KeyError:
-                        info[possible[0]] = possible[1]
+                        info[field] = self.participants_tsv.loc[f"sub-{s}", field]
+                    except (KeyError, TypeError):
+                        info[field] = default
 
                 # We're ignoring folders that don't have a datatype for now as their
                 # contents are covered by folders that do have a datatype
                 if info.get("datatype"):
                     self.subject_session_list.append(info)
 
-        self.lookup_table = pandas.DataFrame(self.subject_session_list)
+        self.lookup_table = pandas.DataFrame(self.subject_session_list).drop_duplicates(
+            ignore_index=True
+        )
 
-        return self.lookup_table.drop_duplicates(inplace=True)
+        return self.lookup_table
+
+    def _age_column_and_months_multiplier(self):
+        """Column for raw age and multiplier so NDA months = raw * multiplier.
+
+        Early exit still returns YEARS_TO_NDA_MONTHS (years→months), not a default age.
+        Missing per-subject age uses DEFAULT_MISSING_AGE_YEARS * YEARS_TO_NDA_MONTHS.
+        """
+        if self.participants_tsv.empty or not self.participants_json:
+            return "age", YEARS_TO_NDA_MONTHS
+        age_col = next(
+            (
+                c
+                for c in self.participants_tsv.columns
+                if c.lower() in ("interview_age", "age")
+            ),
+            None,
+        )
+        if age_col is None:
+            return "age", YEARS_TO_NDA_MONTHS
+        units = str(
+            self.participants_json.get(age_col, {}).get("Units", "") or ""
+        ).lower()
+        if "month" in units:
+            mult = 1.0
+        elif "week" in units:
+            mult = 0.25
+        elif "year" in units:
+            mult = YEARS_TO_NDA_MONTHS
+        else:
+            print(
+                "unable to determine participant.age.Units; not converting to months "
+                f"(column={age_col!r}, Units={units!r})"
+            )
+            mult = 1.0
+        return age_col, mult
 
     def write_lookup_table(self):
         if self.lookup_table.empty:
