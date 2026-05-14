@@ -9,6 +9,29 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--bids-examples-workdir",
+        action="store",
+        default=None,
+        metavar="DIR",
+        help=(
+            "For test_bids_examples_to_nda: write each dataset under DIR/<dataset>/ "
+            "(instead of a TemporaryDirectory) so outputs can be inspected. "
+            "Example: --bids-examples-workdir=/home/you/test_bids_examples_nda"
+        ),
+    )
+
+
+@pytest.fixture
+def bids_examples_workdir(request) -> Path | None:
+    """Directory from ``--bids-examples-workdir``, or None to use a temp directory."""
+    raw = request.config.getoption("--bids-examples-workdir", default=None)
+    if raw is None:
+        return None
+    return Path(raw).expanduser().resolve()
+
 # load GUIDS from text file
 with open("tests/ten_pseudoguids.csv", "r") as f:
     GUIDS = [guid for guid in f.read().splitlines() if "NDAR" in guid]

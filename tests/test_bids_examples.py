@@ -2,14 +2,35 @@
 
 Skips all tests in this module if the submodule is not initialized or if
 no example datasets (e.g. pet002) are present. Run `make submodules` first.
+
+To keep NDA pipeline outputs for inspection, pass a base directory::
+
+    pytest tests/test_bids_examples.py -v --bids-examples-workdir=/home/you/test_bids_examples_nda
+
+Each dataset is written under ``WORKDIR/<dataset>/<dataset>_reduced/`` (same
+layout as the default temporary parent). Remove a dataset subdir for a clean rerun.
 """
 
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
+
 import pytest
 
 from records import vtcmd_path
+
+
+@contextmanager
+def _bids_examples_target_path(work_root: Path | None, dataset_name: str):
+    """Parent for ``{dataset_name}_reduced``: temp dir, or ``work_root / dataset_name``."""
+    if work_root is not None:
+        base = (work_root / dataset_name).expanduser().resolve()
+        base.mkdir(parents=True, exist_ok=True)
+        yield base
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        yield Path(tmp)
 
 # Folder names under bids-examples to skip (e.g. "code", "tools").
 # Datasets that fail reduce_bids + lookup are listed in tests/exclude.txt (one per line).
@@ -118,8 +139,11 @@ def test_pet002_example_present(bids_examples_available):
     assert (pet002 / "participants.tsv").is_file() or (pet002 / "dataset_description.json").is_file()
 
 
-def test_bids_examples_to_nda(bids_examples_available, dataset_path):
+def test_bids_examples_to_nda(bids_examples_available, dataset_path, bids_examples_workdir):
     """Per dataset: temp folder -> reduce -> lookup on reduced -> update lookup.csv with GUIDs/dates; assert success.
+
+    Use ``pytest ... --bids-examples-workdir=/path`` to keep outputs under
+    ``/path/<dataset>/`` (same layout as the default temp parent) for inspection.
 
     Assumes pytest runs in the same environment where the project is installed
     (``pyproject.toml`` dependencies, including ``nda-tools`` / ``vtcmd``).
@@ -145,12 +169,11 @@ def test_bids_examples_to_nda(bids_examples_available, dataset_path):
     from prepare import input_check, filemap_and_recordsprep
 
     name = dataset_path.name
-    # 1. Create a temporary folder for only this single dataset
-    with tempfile.TemporaryDirectory() as tmp:
-        target_path = Path(tmp)
+    # 1. Parent for this dataset: temp dir, or --bids-examples-workdir / <dataset> /
+    with _bids_examples_target_path(bids_examples_workdir, name) as target_path:
         reduced_bids_dataset = target_path / f"{name}_reduced"
         nda_upload_directory = reduced_bids_dataset / "upload"
-        nda_upload_directory.mkdir(parents=True,exist_ok=True)
+        nda_upload_directory.mkdir(parents=True, exist_ok=True)
         # 2. Run reduce_bids_participants on this dataset; target path is within the temp folder.
         #    (This reduces the dataset and writes the reduced BIDS tree into target_path.)
         try:

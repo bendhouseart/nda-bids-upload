@@ -226,18 +226,43 @@ def _copy_dataset_level_files(
 def _populate_lookup_guids_and_dates(
     df: pd.DataFrame, keep_ids: list[str], guids: list[str], base_date: date | None = None
 ) -> pd.DataFrame:
-    """Fill subjectkey from guids (by subject index in keep_ids) and interview_date as mm/dd/yyyy."""
+    """Fill subjectkey from guids (by subject index in keep_ids) and interview_date as mm/dd/yyyy.
+
+    interview_date is unique per ``bids_subject_session`` (BIDS subject + session) so
+    NDA QA does not flag duplicate (GUID, interview_date) rows across sessions.
+    """
     if base_date is None:
         base_date = _random_date()
     subject_to_idx = {sid: i for i, sid in enumerate(keep_ids)}
     subjectkey = df["src_subject_id"].map(
         lambda s: guids[subject_to_idx[s]] if s in subject_to_idx and subject_to_idx[s] < len(guids) else ""
     )
-    interview_date = df["src_subject_id"].map(
-        lambda s: (base_date + timedelta(days=subject_to_idx.get(s, 0))).strftime("%m/%d/%Y")
-        if s in subject_to_idx
-        else ""
-    )
+    session_col = "bids_subject_session"
+    if session_col in df.columns:
+        visit_keys = sorted(
+            k
+            for k in df[session_col].dropna().unique().tolist()
+            if str(k).strip() != ""
+        )
+        visit_to_date = {
+            key: (base_date + timedelta(days=i)).strftime("%m/%d/%Y")
+            for i, key in enumerate(visit_keys)
+        }
+
+        def _interview_date_for_visit(k):
+            if pd.isna(k) or str(k).strip() == "":
+                return ""
+            return visit_to_date.get(str(k).strip(), "")
+
+        interview_date = df[session_col].map(_interview_date_for_visit)
+    else:
+        interview_date = df["src_subject_id"].map(
+            lambda s: (base_date + timedelta(days=subject_to_idx.get(s, 0))).strftime(
+                "%m/%d/%Y"
+            )
+            if s in subject_to_idx
+            else ""
+        )
     out = df.copy()
     out["subjectkey"] = subjectkey
     out["interview_date"] = interview_date

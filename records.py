@@ -289,15 +289,6 @@ def cli(input):
     with open(lookup_csv, "r") as f:
         lookup = [row for row in csv.DictReader(f)]
 
-    # Create a mapping from NDAR GUID to BIDS subject session
-    # This handles the mismatch between folder names (NDAR GUIDs) and lookup.csv (BIDS IDs)
-    ndar_to_bids_mapping = {}
-    for row in lookup:
-        ndar_guid = row["subjectkey"].replace(
-            "_", ""
-        )  # Remove underscores like in prepare.py
-        ndar_to_bids_mapping[ndar_guid] = row["bids_subject_session"]
-
     ### DO WORK ###
 
     # get original working dir (just to not break things)
@@ -321,9 +312,11 @@ def cli(input):
 
         # create an NDA record for each folder using the content YAML file
         upload_basename = os.path.basename(upload_dir)
-        bids_subject_session, datatype, dataclass, datasubset = upload_basename.split(
+        # First segment is NDAR folder id: sub-<GUID>_ses-<label> or sub-<GUID> (not BIDS sub-01)
+        folder_stem, datatype, dataclass, datasubset = upload_basename.split(
             "."
         )
+        bids_subject_session = folder_stem
 
         # BIDS toplevel: single folder, use first lookup row and top-level-only manifest
         if basename == "image03_sourcedata.bids.toplevel":
@@ -332,31 +325,36 @@ def cli(input):
             manifest.create_from_dir(upload_dir)
             #manifest.create_from_dir(upload_dir, top_level_only=True)
         else:
-            # Extract NDAR GUID from the folder name (e.g., "sub-NDAR123456_ses-baseline" -> "NDAR123456")
-            if bids_subject_session.startswith("sub-"):
-                ndar_guid = bids_subject_session[4:]  # Remove "sub-" prefix
-                if "_ses-" in ndar_guid:
-                    ndar_guid = ndar_guid.split("_ses-")[0]  # Remove session part
+            # Folder stem uses NDAR GUID (e.g. sub-NDAR123_ses-baseline); lookup uses BIDS
+            # bids_subject_session (sub-01_ses-baseline) + subjectkey. Match GUID + session
+            # so each visit folder gets the correct interview_date (do not map GUID→one session).
+            rest = folder_stem[4:] if folder_stem.startswith("sub-") else folder_stem
+            session_label = None
+            if "_ses-" in rest:
+                ndar_guid_raw, session_label = rest.split("_ses-", 1)
             else:
-                ndar_guid = bids_subject_session
+                ndar_guid_raw = rest
+            ndar_guid = ndar_guid_raw.replace("_", "")
 
-            # Look up the corresponding BIDS subject session using the mapping
-            if ndar_guid in ndar_to_bids_mapping:
-                corresponding_bids_subject_session = ndar_to_bids_mapping[ndar_guid]
-            else:
-                print(f"Warning: No mapping found for NDAR GUID: {ndar_guid}")
-                continue
-
-            record_found = False
+            lookup_record = None
             for row in lookup:
-                if row["bids_subject_session"] == corresponding_bids_subject_session:
-                    lookup_record = row
-                    record_found = True
-                    break
+                row_guid = row["subjectkey"].replace("_", "")
+                if row_guid != ndar_guid:
+                    continue
+                bss = row.get("bids_subject_session", "")
+                if session_label is None:
+                    if "_ses-" not in bss:
+                        lookup_record = row
+                        break
+                else:
+                    if "_ses-" in bss and bss.split("_ses-", 1)[1] == session_label:
+                        lookup_record = row
+                        break
 
-            if not record_found:
+            if lookup_record is None:
                 print(
-                    f"Warning: No lookup record found for BIDS subject session: {corresponding_bids_subject_session}"
+                    f"Warning: No lookup record for folder stem {folder_stem!r} "
+                    f"(guid={ndar_guid!r}, session_label={session_label!r})"
                 )
                 continue
 
@@ -474,7 +472,7 @@ def cli(input):
     else:
         print(
             f"Files prepped at {input} with {parent}.complete_records.csv are invalid, run\n"
-            f"vtcdm {input}.complete_records.csv -m {input} --verbose\n"
+            f"vtcmd {parent}.complete_records.csv -m {input} --verbose\n"
             f"for more details on how to fix"
         )
     # run_vtcmd_realtime returns False on exception; check before `== 0` because False == 0 in Python.
@@ -521,23 +519,33 @@ def run_vtcmd_realtime(csv_file, manifest_dir, log_dir=None):
 
         vtcmd_qa_errors_and_warnings = {
             "validation_qa": 0,
-            "validation_warnings": 0
+            "validation_warnings": 0,
         }
+        qa_errors_pattern = r"Complete list of qa errors saved to:\s*(/[^ ]+\.csv)"
+        warnings_pattern = r"Warnings output to:\s*(/[^ ]+\.csv)"
+
+        def _row_count_after_duplicate_records_filter(csv_path: str) -> int:
+            df = pandas.read_csv(csv_path)
+            if "ERROR CODE" in df.columns:
+                mask = df["ERROR CODE"].str.contains(
+                    r"duplicateRecords", na=False
+                )
+                df = df[~mask]
+            return len(df)
+
         for line in process.stdout:
             print(line, end="")
-            if "Warnings output" in line or "qa errors saved to" in line:
-                pattern = r"(?:Warnings output to:|Complete list of qa errors saved to:)\s*(/[^ ]+\.csv)"
-                warnings_files = re.findall(pattern, line)
-                for csv_path in warnings_files:
-                    df = pandas.read_csv(csv_path)
-                    if "ERROR CODE" in df.columns:
-                        mask = df["ERROR CODE"].str.contains(
-                            r"duplicateRecords", na=False
-                        )
-                        df = df[~mask]
-                    row_count = len(df)
-                    vtcmd_qa_errors_and_warnings["validation_qa"] += row_count
-                    vtcmd_qa_errors_and_warnings["validation_warnings"] += row_count
+            # vtcmd writes a warnings CSV even when checks pass; those rows are not QA failures.
+            if "Complete list of qa errors saved to" in line:
+                for csv_path in re.findall(qa_errors_pattern, line):
+                    vtcmd_qa_errors_and_warnings["validation_qa"] += (
+                        _row_count_after_duplicate_records_filter(csv_path)
+                    )
+            elif "Warnings output" in line:
+                for csv_path in re.findall(warnings_pattern, line):
+                    vtcmd_qa_errors_and_warnings["validation_warnings"] += (
+                        _row_count_after_duplicate_records_filter(csv_path)
+                    )
 
         rc = process.wait()
         if rc != 0:
