@@ -63,12 +63,8 @@ def _project_root() -> Path:
 
 
 def _bids_examples_path() -> Path:
-    """Path to the bids-examples submodule (tests/bids-examples, or bids-examples at project root)."""
-    root = _project_root()
-    for candidate in (root / "tests" / "bids-examples", root / "bids-examples"):
-        if candidate.is_dir():
-            return candidate
-    return root / "tests" / "bids-examples"  # preferred; fixture will skip if missing
+    """Path to the bids-examples submodule (``tests/bids-examples``)."""
+    return _project_root() / "tests" / "bids-examples"
 
 
 def _bids_dataset_dirs(root: Path, exclude: list[str] | None = None):
@@ -156,6 +152,12 @@ def test_bids_examples_to_nda(bids_examples_available, dataset_path, bids_exampl
     ``NDA_USERNAME`` (or ``NDA_TOOLS_USERNAME``) if your username is not already in
     ``settings.cfg``; the password must still be available in the keyring from that
     prior login.
+
+    **CI:** there is no OS keyring on GitHub-hosted Linux runners. The repo workflow
+    sets ``PYTHON_KEYRING_BACKEND=keyrings.alt.file.PlaintextKeyring``, installs
+    ``keyrings.alt``, and runs ``keyring.set_password('nda-tools', user, password)``
+    from ``NDA_USERNAME`` / ``NDA_PASSWORD`` secrets before pytest so ``vtcmd`` can
+    authenticate non-interactively.
     """
     assert vtcmd_path(), (
         "vtcmd missing for this interpreter; install the project here (e.g. `pip install -e .`)."

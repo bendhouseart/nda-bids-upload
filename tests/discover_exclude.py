@@ -27,11 +27,7 @@ def _project_root() -> Path:
 
 
 def _bids_examples_path() -> Path:
-    root = _project_root()
-    for candidate in (root / "tests" / "bids-examples", root / "bids-examples"):
-        if candidate.is_dir():
-            return candidate
-    return root / "tests" / "bids-examples"
+    return _project_root() / "tests" / "bids-examples"
 
 
 def main() -> None:

@@ -79,13 +79,22 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _bids_examples_dir() -> Path | None:
+    """bids-examples submodule path (see ``.gitmodules``)."""
+    candidate = _project_root() / "tests" / "bids-examples"
+    return candidate if candidate.is_dir() else None
+
+
 @pytest.fixture(scope="session")
 def bids_examples_root() -> Path:
     """Path to the bids-examples directory (submodule)."""
-    root = _project_root() / "bids-examples"
-    if not root.is_dir():
-        pytest.skip("bids-examples not found (submodule may not be initialized)")
-    return root
+    found = _bids_examples_dir()
+    if found is None:
+        pytest.skip(
+            "tests/bids-examples not found (submodule may not be initialized; "
+            "run: git submodule update --init --recursive)"
+        )
+    return found
 
 
 @pytest.fixture(scope="session")
