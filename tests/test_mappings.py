@@ -40,3 +40,17 @@ def test_bids_example_yaml_mappings(pet002_copy):
         with open(y, 'r') as infile:
             yaml_mapping = yaml.safe_load(infile)
             assert type(yaml_mapping) is dict
+
+
+def test_toplevel_yaml_uses_valid_image03_enums(pet002_copy):
+    upload_dir = pet002_copy.upload_dir
+    MappingTemplator(pet002_copy.bids_dir, upload_dir)
+    toplevel_yaml = upload_dir / "image03_sourcedata.bids.toplevel.yaml"
+    assert toplevel_yaml.exists()
+    fields = yaml.safe_load(toplevel_yaml.read_text())
+    assert fields["scan_object"] == "Live"
+    assert fields["image_modality"] == "PET"
+    assert fields["scan_type"] == "PET"
+    assert fields["image_file_format"] == "DICOM"
+    assert fields["scan_type"] != "BIDS dataset metadata"
+    assert "image_num_dimensions" not in fields

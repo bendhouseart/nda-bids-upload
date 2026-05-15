@@ -10,16 +10,13 @@ import argparse
 import csv
 import math
 import os
-import re
 import shutil
 import sys
 import yaml
+from argparse import Namespace
 from datetime import datetime
 from glob import glob
-import subprocess
 from pathlib import Path
-
-import pandas
 
 # load nda_manifests.py from submodule
 sys.path.append(os.path.abspath("manifest-data"))
@@ -485,76 +482,130 @@ def cli(input):
     return 1
 
 
+def _build_vtcmd_args(csv_file, manifest_dir, log_dir=None):
+    """Arguments matching ``vtcmd`` CLI flags used by this project (-m, -w, -f)."""
+    nda_user = (
+        os.environ.get("NDA_USERNAME") or os.environ.get("NDA_TOOLS_USERNAME") or ""
+    ).strip() or None
+    manifest_path = [manifest_dir] if manifest_dir else None
+    custom_log_dir = log_dir if log_dir and os.path.isdir(log_dir) else None
+    return Namespace(
+        files=[csv_file],
+        listDir=None,
+        manifestPath=manifest_path,
+        warning=True,
+        buildPackage=False,
+        collectionID=None,
+        description=None,
+        title=None,
+        username=nda_user,
+        scope=None,
+        replace_submission=0,
+        resume=False,
+        JSON=False,
+        workerThreads=None,
+        batch=50,
+        hideProgress=False,
+        force=True,
+        validation_timeout=300,
+        verbose=False,
+        log_dir=custom_log_dir,
+    )
+
+
+def _qa_error_count_excluding_duplicate_records(qa_results):
+    """Match legacy CSV parsing: ignore QA rows whose error code is duplicateRecords."""
+    return sum(
+        1
+        for error in qa_results.errors
+        if "duplicateRecords" not in (error.err_code or "")
+    )
+
+
+def _run_vtcmd_validate(args, config):
+    """Run the same validation steps as ``vtcmd`` without ``os._exit`` on failures."""
+    import logging
+
+    from NDATools import authenticate
+
+    logger = logging.getLogger(__name__)
+
+    if not config.is_authenticated():
+        authenticate(config)
+
+    validated_files = config.upload_cli.validate(args.files, args.manifestPath)
+
+    if any(vf.system_error() for vf in validated_files):
+        errors_file = config.validation_results_writer.write_errors(validated_files)
+        logger.info(
+            "Unexpected error occurred while validating one or more of the csv files. "
+            "See %s",
+            errors_file,
+        )
+        return 1
+
+    has_errors = False
+    for vf in validated_files:
+        if vf.has_errors():
+            has_errors = True
+            if vf.has_manifest_errors():
+                vf.preview_manifest_errors(10)
+            else:
+                vf.preview_validation_errors(10)
+
+    if has_errors:
+        errors_file = config.validation_results_writer.write_errors(validated_files)
+        logger.info(
+            "\nComplete list of structural errors saved to: %s", errors_file
+        )
+    else:
+        logger.info("All structural checks have passed.")
+
+    if args.warning:
+        warnings_file = config.validation_results_writer.write_warnings(validated_files)
+        logger.info("Warnings output to: %s", warnings_file)
+
+    if not has_errors and config.qa_enabled:
+        logger.info(
+            "\nRunning preliminary data consistency (QA) checks on %s files...",
+            len(args.files),
+        )
+        qa_results = config.upload_cli.qa_validated_files(validated_files)
+        if _qa_error_count_excluding_duplicate_records(qa_results) > 0:
+            qa_results.preview_errors(10)
+            qa_file = config.validation_results_writer.write_qa_results(qa_results)
+            logger.info("\nComplete list of qa errors saved to: %s", qa_file)
+            return 1
+
+    return 1 if has_errors else 0
+
+
 # Usage:
 # run_vtcmd('image03_sourcedata.pet.pet.complete_records.csv', 'image03_sourcedata.pet.pet/')
 def run_vtcmd_realtime(csv_file, manifest_dir, log_dir=None):
-    # TODO Refactor pythonic
-    """Run vtcmd with real-time output"""
-    exe = vtcmd_path()
-    if not exe:
+    """Validate a records CSV via the nda-tools Python API (same path as ``vtcmd``)."""
+    try:
+        import NDATools
+        from NDATools.Configuration import ClientConfiguration
+    except ImportError:
         print(
-            "vtcmd not found (not on PATH and not next to this Python); "
-            "install nda-tools in this environment (e.g. pip install nda-tools).",
+            "nda-tools is not installed for this Python environment; "
+            "install it (e.g. uv sync).",
             file=sys.stderr,
         )
         return 127
-    cmd = [exe, csv_file, "-m", manifest_dir, "-w", "-f"]
-    # nda-tools 0.7+ validates via the NDA API; pass username when set so non-interactive
-    # runs can use credentials already stored in ~/.NDATools/settings.cfg + OS keyring.
-    nda_user = (os.environ.get("NDA_USERNAME") or os.environ.get("NDA_TOOLS_USERNAME") or "").strip()
-    if nda_user:
-        cmd[1:1] = ["-u", nda_user]
-    #    cmd += cmd + ['--log-dir', log_dir]
+
+    args = _build_vtcmd_args(csv_file, manifest_dir, log_dir=log_dir)
+    nda_password = os.environ.get("NDA_PASSWORD", "").strip()
 
     try:
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
-        )
-
-
-        vtcmd_qa_errors_and_warnings = {
-            "validation_qa": 0,
-            "validation_warnings": 0,
-        }
-        qa_errors_pattern = r"Complete list of qa errors saved to:\s*(/[^ ]+\.csv)"
-        warnings_pattern = r"Warnings output to:\s*(/[^ ]+\.csv)"
-
-        def _row_count_after_duplicate_records_filter(csv_path: str) -> int:
-            df = pandas.read_csv(csv_path)
-            if "ERROR CODE" in df.columns:
-                mask = df["ERROR CODE"].str.contains(
-                    r"duplicateRecords", na=False
-                )
-                df = df[~mask]
-            return len(df)
-
-        for line in process.stdout:
-            print(line, end="")
-            # vtcmd writes a warnings CSV even when checks pass; those rows are not QA failures.
-            if "Complete list of qa errors saved to" in line:
-                for csv_path in re.findall(qa_errors_pattern, line):
-                    vtcmd_qa_errors_and_warnings["validation_qa"] += (
-                        _row_count_after_duplicate_records_filter(csv_path)
-                    )
-            elif "Warnings output" in line:
-                for csv_path in re.findall(warnings_pattern, line):
-                    vtcmd_qa_errors_and_warnings["validation_warnings"] += (
-                        _row_count_after_duplicate_records_filter(csv_path)
-                    )
-
-        rc = process.wait()
-        if rc != 0:
-            return rc
-        if vtcmd_qa_errors_and_warnings["validation_qa"] > 0:
-            return 1
-        return 0
+        NDATools.init(args, NDATools.NDA_TOOLS_VTCMD_LOGS_FOLDER)
+        config = ClientConfiguration(args)
+        if nda_password:
+            config.password = nda_password
+        return _run_vtcmd_validate(args, config)
     except Exception as e:
-        print(f"Error running vtcmd: {e}")
+        print(f"Error running vtcmd validation: {e}", file=sys.stderr)
         return False
 
 
