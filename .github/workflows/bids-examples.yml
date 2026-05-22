@@ -1,0 +1,107 @@
+# Validate BIDS example datasets through the NDA prep pipeline (reduce → mapping → prepare → vtcmd API).
+# Does not upload to NDA. Safe to run on pull requests before merge.
+#
+# Data layout:
+#   manifest-data          — submodule (committed gitlink)
+#   tests/bids-examples    — submodule (committed gitlink; was gitignored, now tracked)
+#
+# Pytest only runs datasets not listed in tests/exclude.txt (pet001–pet006, pheno004).
+#
+# Required repo secrets for full NDA validation API:
+#   NDA_USERNAME — NDA account username (not eRA Commons / Login.gov)
+#   NDA_PASSWORD — NDA account password
+# Fork PRs do not receive secrets unless explicitly enabled in repo settings.
+
+name: bids-examples
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: bids-examples-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bids-examples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # secrets cannot be used in step `if:` — expose them as env first
+    env:
+      NDA_USERNAME: ${{ secrets.NDA_USERNAME }}
+      NDA_PASSWORD: ${{ secrets.NDA_PASSWORD }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Initialize submodules
+        run: |
+          set -euo pipefail
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          test -d manifest-data
+          test -f manifest-data/nda_manifests.py || test -f manifest-data/__init__.py
+
+      # Branches without a tests/bids-examples gitlink still need example data.
+      # When the submodule is present, checkout/update above clones the full upstream repo.
+      - name: Ensure bids-examples test datasets
+        run: |
+          set -euo pipefail
+          if [ -f tests/bids-examples/default-config.json ] && [ -d tests/bids-examples/pet002 ]; then
+            echo "bids-examples ready (submodule at $(git -C tests/bids-examples rev-parse --short HEAD))"
+            exit 0
+          fi
+          echo "::warning::tests/bids-examples missing after submodule update; sparse-cloning test datasets only"
+          rm -rf tests/bids-examples
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/bids-standard/bids-examples.git tests/bids-examples
+          cd tests/bids-examples
+          git sparse-checkout set --cone \
+            default-config.json \
+            pet001 pet002 pet003 pet004 pet005 pet006 pheno004
+          test -d pet002
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python and project dependencies
+        run: |
+          uv sync --dev
+          uv pip install -e .
+
+      - name: Install bids-validator CLI
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Add bids-validator to PATH
+        run: |
+          deno install -ERWNgf jsr:@bids/validator
+          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+
+      - name: Configure NDA credentials for headless validation
+        if: ${{ env.NDA_USERNAME != '' && env.NDA_PASSWORD != '' }}
+        env:
+          PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+        run: |
+          uv pip install keyrings.alt
+          uv run python -c "import keyring; keyring.set_password('nda-tools', __import__('os').environ['NDA_USERNAME'], __import__('os').environ['NDA_PASSWORD'])"
+
+      - name: Note missing NDA secrets
+        if: ${{ env.NDA_USERNAME == '' || env.NDA_PASSWORD == '' }}
+        run: |
+          echo "::warning::NDA_USERNAME / NDA_PASSWORD secrets are not set. Submodule and import checks will run; per-dataset NDA validation will likely fail at authentication."
+
+      - name: Run bids-examples tests
+        env:
+          PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+        run: |
+          uv run pytest tests/test_bids_examples.py -v --no-cov
