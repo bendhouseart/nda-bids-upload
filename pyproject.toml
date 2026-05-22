@@ -19,13 +19,11 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "mkdocs-material>=9.0.0",
     "pyyaml>=6.0",
     "pandas>=1.5.0",
     "file-mapper @ git+https://github.com/bendhouseart/file-mapper.git",
     "nda-tools>=0.7.0",
     "pybids>=0.20.0",
-    "toga>=0.4.0",
 ]
 
 [project.scripts]
@@ -35,9 +33,9 @@ nda-lookup = "utilities.lookup:cli"
 nda-mapping = "utilities.mapping:cli"
 
 [project.urls]
-Homepage = "https://github.com/DCAN-Labs/nda-bids-upload"
+Homepage = "https://github.com/nimh-dsst/nda-bids-upload"
 Documentation = "https://ndabids.readthedocs.io/"
-Repository = "https://github.com/DCAN-Labs/nda-bids-upload"
+Repository = "https://github.com/nimh-dsst/nda-bids-upload"
 
 [build-system]
 requires = ["hatchling"]
