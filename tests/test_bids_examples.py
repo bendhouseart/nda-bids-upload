@@ -11,6 +11,7 @@ Each dataset is written under ``WORKDIR/<dataset>/<dataset>_reduced/`` (same
 layout as the default temporary parent). Remove a dataset subdir for a clean rerun.
 """
 
+import os
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -19,6 +20,33 @@ from pathlib import Path
 import pytest
 
 from records import vtcmd_path
+
+
+def _nda_credentials_available() -> bool:
+    username = (
+        os.environ.get("NDA_USERNAME") or os.environ.get("NDA_TOOLS_USERNAME") or ""
+    ).strip()
+    password = os.environ.get("NDA_PASSWORD", "").strip()
+    if username and password:
+        return True
+    if not username:
+        return False
+    try:
+        import keyring
+
+        return bool(keyring.get_password("nda-tools", username))
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="module")
+def nda_api_credentials():
+    if _nda_credentials_available():
+        return
+    pytest.skip(
+        "NDA credentials not available (set NDA_USERNAME and NDA_PASSWORD). "
+        "Fork pull requests do not receive repository secrets on GitHub Actions."
+    )
 
 
 @contextmanager
@@ -135,7 +163,9 @@ def test_pet002_example_present(bids_examples_available):
     assert (pet002 / "participants.tsv").is_file() or (pet002 / "dataset_description.json").is_file()
 
 
-def test_bids_examples_to_nda(bids_examples_available, dataset_path, bids_examples_workdir):
+def test_bids_examples_to_nda(
+    bids_examples_available, dataset_path, bids_examples_workdir, nda_api_credentials
+):
     """Per dataset: temp folder -> reduce -> lookup on reduced -> update lookup.csv with GUIDs/dates; assert success.
 
     Use ``pytest ... --bids-examples-workdir=/path`` to keep outputs under
