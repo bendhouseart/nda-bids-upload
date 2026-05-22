@@ -29,6 +29,7 @@ jobs:
   bids-examples:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    environment: actions
     # secrets cannot be used in step `if:` — expose them as env first
     env:
       NDA_USERNAME: ${{ secrets.NDA_USERNAME }}
