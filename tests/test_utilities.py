@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 from bids import BIDSLayout
 from tempfile import TemporaryDirectory
-from utilities.lookup import LookUpTable
+from utilities.lookup import LookUpTable, _normalize_nda_sex
 
 # Expected lookup for conftest minimal PET layout: years in TSV → interview_age in months (NDA).
 EXPECTED_PET002_LOOKUP = pd.DataFrame([
@@ -15,6 +15,44 @@ EXPECTED_PET002_LOOKUP = pd.DataFrame([
     {"bids_subject_session": "sub-02_ses-rescan", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "weight": 51.2, "datatype": "anat"},
     {"bids_subject_session": "sub-02_ses-rescan", "subjectkey": "", "src_subject_id": "sub-02", "interview_date": "", "interview_age": 240, "sex": "F", "weight": 51.2, "datatype": "pet"},
 ])
+
+
+def test_normalize_nda_sex_lowercase():
+    """NDA image03 sex must be M or F (case-sensitive); BIDS often uses m/f."""
+    assert _normalize_nda_sex("m") == "M"
+    assert _normalize_nda_sex("f") == "F"
+    assert _normalize_nda_sex("M") == "M"
+    assert _normalize_nda_sex("female") == "F"
+
+
+def test_lookup_table_lowercase_participants_sex(tmp_path):
+    """pheno004-style participants.tsv uses lowercase sex; lookup.csv must use M/F."""
+    import json
+
+    pd.DataFrame(
+        {"participant_id": ["sub-01", "sub-02"], "sex": ["m", "f"], "age": [22, 63]}
+    ).to_csv(tmp_path / "participants.tsv", sep="\t", index=False)
+    (tmp_path / "participants.json").write_text(
+        json.dumps(
+            {
+                "participant_id": {"Description": "id"},
+                "sex": {"Levels": {"M": "male", "F": "female"}},
+                "age": {"Units": "years"},
+            }
+        )
+    )
+    (tmp_path / "dataset_description.json").write_text(
+        '{"Name": "test", "BIDSVersion": "1.6.0"}'
+    )
+    for sub, sex in (("01", "m"), ("02", "f")):
+        anat = tmp_path / f"sub-{sub}" / "anat"
+        anat.mkdir(parents=True)
+        (anat / f"sub-{sub}_T1w.nii.gz").write_bytes(b"")
+        (anat / f"sub-{sub}_T1w.json").write_text("{}")
+
+    lut = LookUpTable(str(tmp_path))
+    lut.create_lookup_table()
+    assert set(lut.lookup_table["sex"].unique()) == {"M", "F"}
 
 
 def test_load_bids_pet_data(bids_examples_petprep):

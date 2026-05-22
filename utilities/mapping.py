@@ -92,19 +92,45 @@ class MappingTemplator:
         with open(out_path, "w") as f:
             json.dump(toplevel, f, indent=4)
 
+    def _image03_yaml_templates(self):
+        """Shared image03 content YAML fields for anat/pet (and bids.toplevel)."""
+        return {
+            "anat": {
+                "image_description": "anatomical",
+                "scan_type": "MR structural (T1)",
+                "scan_object": "Live",
+                "image_modality": "MRI",
+                "transformation_performed": "No",
+                "image_file_format": "DICOM",
+            },
+            "pet": {
+                "image_description": "PET",
+                "scan_type": "PET",
+                "scan_object": "Live",
+                "image_modality": "PET",
+                "transformation_performed": "No",
+                "image_file_format": "DICOM",
+            },
+        }
+
+    def _toplevel_image03_fields(self):
+        """image03 content for BIDS root files; same fields as anat/pet datatype YAMLs.
+
+        Files are still uploaded via manifest (records.py). Use the same template as
+        image03_sourcedata.anat.anat / .pet.pet so vtcmd does not require extra non-DICOM
+        or MRI-conditional metadata on an empty image_file_format.
+        """
+        templates = self._image03_yaml_templates()
+        template_key = "pet" if "pet" in set(self.datatypes) else "anat"
+        fields = dict(templates[template_key])
+        fields["image_description"] = "BIDS dataset root files (manifest)"
+        return fields
+
     def create_toplevel_yaml(self):
         """Create content YAML for image03_sourcedata.bids.toplevel."""
-        template = {
-            "image_description": "bids toplevel",
-            "scan_type": "BIDS dataset metadata",
-            "scan_object": "Other",
-            "image_modality": "Other",
-            "transformation_performed": "No",
-            "image_file_format": "DICOM",
-        }
         out_path = Path(self.destination_path) / "image03_sourcedata.bids.toplevel.yaml"
         with open(out_path, "w") as f:
-            yaml.dump(template, f)
+            yaml.dump(self._toplevel_image03_fields(), f)
 
     def populate_subject_mappings(self):
         for subject, datatype in self.subject_mappings.items():
@@ -174,24 +200,7 @@ class MappingTemplator:
         return _file_names
 
     def create_yamls(self):
-        templates = {
-            "anat": {
-                "image_description": "anatomical",
-                "scan_type": "MR structural (T1)",
-                "scan_object": "Live",
-                "image_modality": "MRI",
-                "transformation_performed": "No",
-                "image_file_format": "DICOM",
-            },
-            "pet": {
-                "image_description": "PET",
-                "scan_type": "PET",
-                "scan_object": "Live",
-                "image_modality": "PET",
-                "transformation_performed": "No",
-                "image_file_format": "DICOM",
-            },
-        }
+        templates = self._image03_yaml_templates()
 
         _yaml_paths = []
         for datatype in self.datatypes:

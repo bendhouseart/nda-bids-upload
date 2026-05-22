@@ -1,24 +1,24 @@
 #! /usr/bin/env python3
 
 """
-DCAN Labs NDA BIDS NDA vtcmd upload tool
+NDA BIDS NDA upload tool
 
 Created  03/09/2020  Natalie Alton (altonn@ohsu.edu)
 Modified 03/18/2020  Eric Earl (earl@ohsu.edu)
+Modified 05/15/2026  Anthony Galassi (anthony.galassi@nih.gov)
 """
 
 import argparse
 import math
 import os
-import subprocess
 import sys
-
-from glob import glob
+from argparse import Namespace
+from datetime import datetime
 
 __doc__ = """
 This python command-line tool allows the user a more
 automated upload process to the NDA production environment
-using the nda-tools vtcmd.
+using the nda-tools Python API (same behavior as ``vtcmd -b``).
 """
 
 
@@ -54,17 +54,6 @@ def generate_parser():
             'similar, and "subset" is the user-defined "data subset type".'
             "For example: "
             ".../imagingcollection01_inputs.anat.T1w/sub-NDARABC123_ses-baseline.inputs.anat.T1w"
-        ),
-    )
-    parser.add_argument(
-        "-vt",
-        "--ndavtcmd",
-        dest="vtcmd",
-        metavar="VTCMD",
-        type=str,
-        required=True,
-        help=(
-            "Path to the vtcmd located in the virtual environment being used for the upload."
         ),
     )
     return parser
@@ -146,9 +135,137 @@ def input_checks():
     if problem_child_flag:
         sys.exit(6)
 
-    if not os.path.isfile(args.vtcmd):
-        print(args.vtcmd + " is not a file!  Exiting...")
+    try:
+        import NDATools  # noqa: F401
+    except ImportError:
+        print(
+            "nda-tools is not installed for this Python environment; "
+            "install it (e.g. uv sync). Exiting...",
+            file=sys.stderr,
+        )
         sys.exit(7)
+
+
+def _read_nonempty_lines(path):
+    with open(path) as f:
+        return [line.strip() for line in f if line.strip()]
+
+
+def _build_upload_args(
+    records_batch,
+    source,
+    collection_id,
+    title,
+    description,
+    associated_dirs,
+):
+    """Arguments matching ``vtcmd`` upload invocation (-m, -l, -c, -t, -d, -b)."""
+    from records import _nda_username_from_env
+
+    nda_user = _nda_username_from_env()
+    return Namespace(
+        files=[records_batch],
+        listDir=associated_dirs,
+        manifestPath=[source],
+        warning=False,
+        buildPackage=True,
+        collectionID=collection_id,
+        description=description,
+        title=title,
+        username=nda_user,
+        scope=None,
+        replace_submission=0,
+        resume=False,
+        JSON=False,
+        workerThreads=None,
+        batch=50,
+        hideProgress=False,
+        force=True,
+        validation_timeout=300,
+        verbose=False,
+        log_dir=None,
+    )
+
+
+def _run_upload_batch(
+    records_batch,
+    source,
+    collection_id,
+    title,
+    description,
+    folders_batch,
+):
+    """Validate a batch CSV and submit via nda-tools (``vtcmd -b`` equivalent)."""
+    import logging
+
+    try:
+        import NDATools
+        from NDATools import authenticate
+        from NDATools.Configuration import ClientConfiguration
+    except ImportError:
+        print(
+            "nda-tools is not installed for this Python environment; "
+            "install it (e.g. uv sync).",
+            file=sys.stderr,
+        )
+        return 127
+
+    associated_dirs = _read_nonempty_lines(folders_batch)
+    args = _build_upload_args(
+        records_batch, source, collection_id, title, description, associated_dirs
+    )
+    from records import _sync_env_credentials_to_keyring_and_config
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        NDATools.init(args, NDATools.NDA_TOOLS_VTCMD_LOGS_FOLDER)
+        config = ClientConfiguration(args)
+        _sync_env_credentials_to_keyring_and_config(config)
+        authenticate(config)
+
+        validated_files = config.upload_cli.validate(args.files, args.manifestPath)
+
+        if any(vf.system_error() for vf in validated_files):
+            errors_file = config.validation_results_writer.write_errors(validated_files)
+            logger.error(
+                "Unexpected error occurred while validating one or more of the csv files. "
+                "See %s",
+                errors_file,
+            )
+            return 1
+
+        has_errors = any(vf.has_errors() for vf in validated_files)
+        if has_errors:
+            for vf in validated_files:
+                if vf.has_errors():
+                    if vf.has_manifest_errors():
+                        vf.preview_manifest_errors(10)
+                    else:
+                        vf.preview_validation_errors(10)
+            errors_file = config.validation_results_writer.write_errors(validated_files)
+            logger.error(
+                "Validation failed for %s. Errors saved to: %s",
+                records_batch,
+                errors_file,
+            )
+            return 1
+
+        submission = config.upload_cli.submit(
+            validated_files,
+            collection_id,
+            title,
+            description,
+            associated_dirs,
+        )
+        print(
+            "\nYou have successfully completed uploading files for submission {} "
+            "with status: {}".format(submission.id, submission.status.value)
+        )
+        return 0
+    except Exception as e:
+        print(f"Error running NDA upload: {e}", file=sys.stderr)
+        return 1
 
 
 def nda_vt():
@@ -160,9 +277,8 @@ def nda_vt():
     source = os.path.abspath(args.source)
     basename = os.path.basename(source)
 
-    ndastructure, data_subset = basename.split("_", 1)
+    _, data_subset = basename.split("_", 1)
     complete_csv = source + ".complete_records.csv"
-    glob_string = os.path.join(source, "*." + data_subset)
 
     with open(complete_csv) as f:
         all_records = f.readlines()
@@ -189,47 +305,27 @@ def nda_vt():
                     "WARNING: "
                     + records_batch
                     + " appears in "
-                    + upload_file
+                    + upload_record
                     + " so may already have been uploaded to the NDA."
                 )
                 continue
 
-            subprocess.call(("echo `date` Uploading: " + description), shell=True)
-            """
-            this is the most important command, args.vtcmd is a direct input for nda tools upload command
-            records batch is at most 500 records to be uploaded at once, this had to do with the stability an upload (may be fixed)
-            but realistically if it works chill out.
-
-            Note: you need to login with the nda tool/file in home directory to enable auto login (~/.nda) 
-
-            -c collection id (this is pre-assigned and you will need to have access to it)
-            -m root folder containg data to upload (working_directory in this repo/codebase)
-            -t title (name of the json and yaml ) image03_sourcedata....
-            -d also name of the json and yaml image03_sourcedata... (will find out)
-            -l points to a batch file of folder e.g. working_directory/image03_sourcedata.pet.pet.complete_folders.txt that contains 
-               all folders that have a manifest.json file and will be uploaded to the collection
-            -b batch (NDA's definition) 
-            """
-            cmd = (
-                args.vtcmd
-                + " "
-                + records_batch
-                + " -c "
-                + str(args.collection_id)
-                + " -m "
-                + source
-                + " -t "
-                + description
-                + " -d "
-                + description
-                + " -l `cat "
-                + folders_batch
-                + "` "
-                + " -b"
+            print(datetime.now(), "Uploading:", description)
+            upload_rc = _run_upload_batch(
+                records_batch,
+                source,
+                args.collection_id,
+                description,
+                description,
+                folders_batch,
             )
+            if upload_rc != 0:
+                print(
+                    f"Upload failed for {records_batch} (exit {upload_rc}). Exiting.",
+                    file=sys.stderr,
+                )
+                sys.exit(upload_rc)
 
-            subprocess.call(("echo " + cmd), shell=True)
-            subprocess.call(cmd, shell=True)
             upload_file.write(records_batch + "\n")
 
     upload_file.close()

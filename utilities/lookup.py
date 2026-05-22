@@ -11,6 +11,21 @@ YEARS_TO_NDA_MONTHS = 12.0
 DEFAULT_MISSING_AGE_YEARS = 89
 
 
+def _normalize_nda_sex(value) -> str:
+    """Map BIDS participants sex/gender values to NDA image03 enums (M or F)."""
+    if value is None or (isinstance(value, float) and pandas.isna(value)):
+        return "F"
+    token = str(value).strip().lower()
+    if token in ("m", "male"):
+        return "M"
+    if token in ("f", "female"):
+        return "F"
+    upper = str(value).strip().upper()
+    if upper in ("M", "F"):
+        return upper
+    return "F"
+
+
 class LookUpTable:
     def __init__(self, bids_dataset: str, destination_path=""):
         self.path_to_bids_dataset = str(bids_dataset)
@@ -84,6 +99,11 @@ class LookUpTable:
             self.participants_json["sex"] = self.participants_json[gender_col]
             self.participants_json.pop(gender_col)
 
+        if "sex" in self.participants_tsv.columns:
+            self.participants_tsv["sex"] = self.participants_tsv["sex"].apply(
+                _normalize_nda_sex
+            )
+
         age_col, age_to_months_mult = self._age_column_and_months_multiplier()
 
         # create a subject/session list
@@ -111,7 +131,10 @@ class LookUpTable:
                     )
                 for field, default in (("sex", "F"), ("weight", 89)):
                     try:
-                        info[field] = self.participants_tsv.loc[f"sub-{s}", field]
+                        raw = self.participants_tsv.loc[f"sub-{s}", field]
+                        info[field] = (
+                            _normalize_nda_sex(raw) if field == "sex" else raw
+                        )
                     except (KeyError, TypeError):
                         info[field] = default
 
