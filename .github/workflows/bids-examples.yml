@@ -1,0 +1,91 @@
+# Validate BIDS example datasets through the NDA prep pipeline (reduce → mapping → prepare → vtcmd API).
+# Does not upload to NDA. Safe to run on pull requests before merge.
+#
+# Required repo secrets for full pipeline (NDA validation API):
+#   NDA_USERNAME — NDA account username (not eRA Commons / Login.gov)
+#   NDA_PASSWORD — NDA account password
+# Fork PRs do not receive secrets unless explicitly enabled in repo settings.
+
+name: bids-examples
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: bids-examples-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bids-examples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Verify submodules
+        run: |
+          set -euo pipefail
+          if [ ! -d tests/bids-examples ]; then
+            echo "::error::tests/bids-examples missing. Ensure .gitmodules is committed and submodules are initialized."
+            exit 1
+          fi
+          if [ ! -d manifest-data ]; then
+            echo "::error::manifest-data submodule missing."
+            exit 1
+          fi
+          echo "bids-examples top-level entries:"
+          ls -la tests/bids-examples | head -20
+          if [ -d tests/bids-examples/pet002 ]; then
+            echo "pet002 present"
+          else
+            echo "::warning::pet002 not found; smoke tests may skip dataset-specific checks"
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python and project dependencies
+        run: |
+          uv sync --dev
+          uv pip install -e .
+
+      - name: Install bids-validator CLI
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Add bids-validator to PATH
+        run: |
+          deno install -ERWNgf jsr:@bids/validator
+          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+
+      - name: Configure NDA credentials for headless validation
+        if: ${{ secrets.NDA_USERNAME != '' && secrets.NDA_PASSWORD != '' }}
+        env:
+          NDA_USERNAME: ${{ secrets.NDA_USERNAME }}
+          NDA_PASSWORD: ${{ secrets.NDA_PASSWORD }}
+          PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+        run: |
+          uv pip install keyrings.alt
+          uv run python -c "import keyring; keyring.set_password('nda-tools', __import__('os').environ['NDA_USERNAME'], __import__('os').environ['NDA_PASSWORD'])"
+
+      - name: Note missing NDA secrets
+        if: ${{ secrets.NDA_USERNAME == '' || secrets.NDA_PASSWORD == '' }}
+        run: |
+          echo "::warning::NDA_USERNAME / NDA_PASSWORD secrets are not set. Submodule and import checks will run; per-dataset NDA validation will likely fail at authentication."
+
+      - name: Run bids-examples tests
+        env:
+          PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+        run: |
+          uv run pytest tests/test_bids_examples.py -v --no-cov
