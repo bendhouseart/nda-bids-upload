@@ -23,6 +23,10 @@ jobs:
   bids-examples:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # secrets cannot be used in step `if:` — expose them as env first
+    env:
+      NDA_USERNAME: ${{ secrets.NDA_USERNAME }}
+      NDA_PASSWORD: ${{ secrets.NDA_PASSWORD }}
 
     steps:
       - name: Checkout repository and submodules
@@ -70,17 +74,15 @@ jobs:
           echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
 
       - name: Configure NDA credentials for headless validation
-        if: ${{ secrets.NDA_USERNAME != '' && secrets.NDA_PASSWORD != '' }}
+        if: ${{ env.NDA_USERNAME != '' && env.NDA_PASSWORD != '' }}
         env:
-          NDA_USERNAME: ${{ secrets.NDA_USERNAME }}
-          NDA_PASSWORD: ${{ secrets.NDA_PASSWORD }}
           PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
         run: |
           uv pip install keyrings.alt
           uv run python -c "import keyring; keyring.set_password('nda-tools', __import__('os').environ['NDA_USERNAME'], __import__('os').environ['NDA_PASSWORD'])"
 
       - name: Note missing NDA secrets
-        if: ${{ secrets.NDA_USERNAME == '' || secrets.NDA_PASSWORD == '' }}
+        if: ${{ env.NDA_USERNAME == '' || env.NDA_PASSWORD == '' }}
         run: |
           echo "::warning::NDA_USERNAME / NDA_PASSWORD secrets are not set. Submodule and import checks will run; per-dataset NDA validation will likely fail at authentication."
 
