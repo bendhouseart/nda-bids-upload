@@ -120,6 +120,7 @@ class LookUpTable:
                     "src_subject_id": f"sub-{s}",
                     "interview_date": "",
                     "datatype": ents.get("datatype", ""),
+                    "image_description": entities.relpath
                 }
                 try:
                     raw_age = self.participants_tsv.loc[f"sub-{s}", age_col]
