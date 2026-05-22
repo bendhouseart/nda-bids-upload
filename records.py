@@ -482,11 +482,47 @@ def cli(input):
     return 1
 
 
-def _build_vtcmd_args(csv_file, manifest_dir, log_dir=None):
-    """Arguments matching ``vtcmd`` CLI flags used by this project (-m, -w, -f)."""
-    nda_user = (
+_NDA_KEYRING_SERVICE = "nda-tools"
+
+
+def _nda_username_from_env():
+    return (
         os.environ.get("NDA_USERNAME") or os.environ.get("NDA_TOOLS_USERNAME") or ""
     ).strip() or None
+
+
+def _nda_password_from_env():
+    """Return NDA_PASSWORD as stored in the environment (do not strip — preserves special chars)."""
+    value = os.environ.get("NDA_PASSWORD")
+    if value is None or value == "":
+        return None
+    return value
+
+
+def _sync_env_credentials_to_keyring_and_config(config):
+    """When ``NDA_USERNAME`` and ``NDA_PASSWORD`` are set, apply them to *config* and keyring."""
+    username = _nda_username_from_env()
+    password = _nda_password_from_env()
+    if not username or password is None:
+        return
+    username = username.lower()
+    config.username = username
+    config.password = password
+    try:
+        import keyring
+
+        keyring.set_password(_NDA_KEYRING_SERVICE, username, password)
+    except Exception as e:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Could not save NDA password to keyring: %s", e
+        )
+
+
+def _build_vtcmd_args(csv_file, manifest_dir, log_dir=None):
+    """Arguments matching ``vtcmd`` CLI flags used by this project (-m, -w, -f)."""
+    nda_user = _nda_username_from_env()
     manifest_path = [manifest_dir] if manifest_dir else None
     custom_log_dir = log_dir if log_dir and os.path.isdir(log_dir) else None
     return Namespace(
@@ -530,8 +566,9 @@ def _run_vtcmd_validate(args, config):
 
     logger = logging.getLogger(__name__)
 
-    if not config.is_authenticated():
-        authenticate(config)
+    # nda-tools only sets validation_api / manifests_uploader in update_with_auth();
+    # is_authenticated() (username + password) is not enough — always log in first.
+    authenticate(config)
 
     validated_files = config.upload_cli.validate(args.files, args.manifestPath)
 
@@ -596,13 +633,11 @@ def run_vtcmd_realtime(csv_file, manifest_dir, log_dir=None):
         return 127
 
     args = _build_vtcmd_args(csv_file, manifest_dir, log_dir=log_dir)
-    nda_password = os.environ.get("NDA_PASSWORD", "").strip()
 
     try:
         NDATools.init(args, NDATools.NDA_TOOLS_VTCMD_LOGS_FOLDER)
         config = ClientConfiguration(args)
-        if nda_password:
-            config.password = nda_password
+        _sync_env_credentials_to_keyring_and_config(config)
         return _run_vtcmd_validate(args, config)
     except Exception as e:
         print(f"Error running vtcmd validation: {e}", file=sys.stderr)

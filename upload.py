@@ -160,9 +160,9 @@ def _build_upload_args(
     associated_dirs,
 ):
     """Arguments matching ``vtcmd`` upload invocation (-m, -l, -c, -t, -d, -b)."""
-    nda_user = (
-        os.environ.get("NDA_USERNAME") or os.environ.get("NDA_TOOLS_USERNAME") or ""
-    ).strip() or None
+    from records import _nda_username_from_env
+
+    nda_user = _nda_username_from_env()
     return Namespace(
         files=[records_batch],
         listDir=associated_dirs,
@@ -214,16 +214,15 @@ def _run_upload_batch(
     args = _build_upload_args(
         records_batch, source, collection_id, title, description, associated_dirs
     )
-    nda_password = os.environ.get("NDA_PASSWORD", "").strip()
+    from records import _sync_env_credentials_to_keyring_and_config
+
     logger = logging.getLogger(__name__)
 
     try:
         NDATools.init(args, NDATools.NDA_TOOLS_VTCMD_LOGS_FOLDER)
         config = ClientConfiguration(args)
-        if nda_password:
-            config.password = nda_password
-        if not config.is_authenticated():
-            authenticate(config)
+        _sync_env_credentials_to_keyring_and_config(config)
+        authenticate(config)
 
         validated_files = config.upload_cli.validate(args.files, args.manifestPath)
 
