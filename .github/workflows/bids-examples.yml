@@ -1,7 +1,13 @@
 # Validate BIDS example datasets through the NDA prep pipeline (reduce → mapping → prepare → vtcmd API).
 # Does not upload to NDA. Safe to run on pull requests before merge.
 #
-# Required repo secrets for full pipeline (NDA validation API):
+# Data layout:
+#   manifest-data          — submodule (committed gitlink)
+#   tests/bids-examples    — submodule (committed gitlink; was gitignored, now tracked)
+#
+# Pytest only runs datasets not listed in tests/exclude.txt (pet001–pet006, pheno004).
+#
+# Required repo secrets for full NDA validation API:
 #   NDA_USERNAME — NDA account username (not eRA Commons / Login.gov)
 #   NDA_PASSWORD — NDA account password
 # Fork PRs do not receive secrets unless explicitly enabled in repo settings.
@@ -29,29 +35,37 @@ jobs:
       NDA_PASSWORD: ${{ secrets.NDA_PASSWORD }}
 
     steps:
-      - name: Checkout repository and submodules
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Verify submodules
+      - name: Initialize submodules
         run: |
           set -euo pipefail
-          if [ ! -d tests/bids-examples ]; then
-            echo "::error::tests/bids-examples missing. Ensure .gitmodules is committed and submodules are initialized."
-            exit 1
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          test -d manifest-data
+          test -f manifest-data/nda_manifests.py || test -f manifest-data/__init__.py
+
+      # Branches without a tests/bids-examples gitlink still need example data.
+      # When the submodule is present, checkout/update above clones the full upstream repo.
+      - name: Ensure bids-examples test datasets
+        run: |
+          set -euo pipefail
+          if [ -f tests/bids-examples/default-config.json ] && [ -d tests/bids-examples/pet002 ]; then
+            echo "bids-examples ready (submodule at $(git -C tests/bids-examples rev-parse --short HEAD))"
+            exit 0
           fi
-          if [ ! -d manifest-data ]; then
-            echo "::error::manifest-data submodule missing."
-            exit 1
-          fi
-          echo "bids-examples top-level entries:"
-          ls -la tests/bids-examples | head -20
-          if [ -d tests/bids-examples/pet002 ]; then
-            echo "pet002 present"
-          else
-            echo "::warning::pet002 not found; smoke tests may skip dataset-specific checks"
-          fi
+          echo "::warning::tests/bids-examples missing after submodule update; sparse-cloning test datasets only"
+          rm -rf tests/bids-examples
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/bids-standard/bids-examples.git tests/bids-examples
+          cd tests/bids-examples
+          git sparse-checkout set --cone \
+            default-config.json \
+            pet001 pet002 pet003 pet004 pet005 pet006 pheno004
+          test -d pet002
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
