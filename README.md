@@ -1,5 +1,7 @@
 # Welcome to the NIMH DSST NDA BIDS Upload Repository
 
+[![bids-examples](https://github.com/nimh-dsst/nda-bids-upload/actions/workflows/bids-examples.yml/badge.svg)](https://github.com/nimh-dsst/nda-bids-upload/actions/workflows/bids-examples.yml)
+
 This repository is for taking data as BIDS and uploading it to an NDA collection.
 
 The full documentation lives here: [ndabids.readthedocs.io](https://ndabids.readthedocs.io/)
